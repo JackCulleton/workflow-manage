@@ -4,7 +4,7 @@ info:
   description: Read and update Jack's project workflow dashboard.
   version: 1.0.0
 servers:
-  - url: https://YOUR-VERCEL-DOMAIN.vercel.app/api
+  - url: https://workflow-manage.vercel.app/api
 paths:
   /workflow:
     get:
