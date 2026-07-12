@@ -16,10 +16,17 @@ function supabaseHeaders() {
   return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
 }
 
+async function storageError(action, response) {
+  const body = await response.json().catch(() => null);
+  const detail = body?.message || body?.hint || body?.code;
+  const suffix = detail ? `: ${detail}` : '';
+  return new Error(`Storage ${action} failed (${response.status})${suffix}`);
+}
+
 async function readState() {
   const url = `${process.env.SUPABASE_URL}/rest/v1/workflow_state?id=eq.${WORKFLOW_ID}&select=data`;
   const response = await fetch(url, { headers: supabaseHeaders() });
-  if (!response.ok) throw new Error(`Storage read failed (${response.status}).`);
+  if (!response.ok) throw await storageError('read', response);
   const rows = await response.json();
   return rows[0]?.data || null;
 }
@@ -32,7 +39,7 @@ async function writeState(state) {
     headers: { ...supabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ id: WORKFLOW_ID, data: state, updated_at: new Date().toISOString() })
   });
-  if (!response.ok) throw new Error(`Storage write failed (${response.status}).`);
+  if (!response.ok) throw await storageError('write', response);
 }
 
 export default async function handler(req, res) {
