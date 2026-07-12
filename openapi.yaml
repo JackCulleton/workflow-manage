@@ -1,0 +1,138 @@
+openapi: 3.1.0
+info:
+  title: Personal Workflow Manager
+  description: Read and update Jack's project workflow dashboard.
+  version: 1.0.0
+servers:
+  - url: https://YOUR-VERCEL-DOMAIN.vercel.app/api
+paths:
+  /workflow:
+    get:
+      operationId: getWorkflow
+      summary: Read all phases, topics and progress before discussing or changing the plan.
+      responses:
+        '200':
+          description: Current workflow
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowResponse'
+    put:
+      operationId: replaceWorkflow
+      summary: Replace the full workflow after a deliberate bulk edit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workflow]
+              properties:
+                workflow:
+                  $ref: '#/components/schemas/Workflow'
+      responses:
+        '200': { description: Workflow saved }
+  /phases:
+    post:
+      operationId: addPhase
+      summary: Add a phase to the end of the workflow.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201': { description: Phase added }
+  /topics:
+    post:
+      operationId: addTopic
+      summary: Add a topic to an existing phase.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phase_id, name]
+              properties:
+                phase_id: { type: string }
+                name: { type: string }
+                description: { type: string }
+                status: { type: string, enum: [not_started, in_progress, completed] }
+                activities:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201': { description: Topic added }
+  /topics/{topicId}:
+    patch:
+      operationId: updateTopic
+      summary: Update a topic description, activities, name or completion status.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                status: { type: string, enum: [not_started, in_progress, completed] }
+                activities:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { description: Topic updated }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Topic:
+      type: object
+      required: [id, name, description, status, activities]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [not_started, in_progress, completed] }
+        activities:
+          type: array
+          items: { type: string }
+    Phase:
+      type: object
+      required: [id, name, topics]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        topics:
+          type: array
+          items: { $ref: '#/components/schemas/Topic' }
+        documents:
+          type: array
+          items: { type: object, additionalProperties: true }
+    Workflow:
+      type: object
+      required: [title, subtitle, phases]
+      properties:
+        title: { type: string }
+        subtitle: { type: string }
+        phases:
+          type: array
+          items: { $ref: '#/components/schemas/Phase' }
+    WorkflowResponse:
+      type: object
+      properties:
+        workflow: { $ref: '#/components/schemas/Workflow' }
+security:
+  - bearerAuth: []

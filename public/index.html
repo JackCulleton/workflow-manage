@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Project Launch Plan</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root{
+  --bg:#08090C;
+  --panel:#111318;
+  --panel-2:#15171D;
+  --border:#23262E;
+  --border-soft:#1B1D24;
+  --text:#F2F3F5;
+  --text-dim:#9A9EA9;
+  --text-faint:#5B5F69;
+  --orange:#F5893A;
+  --orange-dim:#3A2A18;
+  --orange-glow:rgba(245,137,58,0.18);
+  --green:#3FCF8E;
+}
+
+*{box-sizing:border-box; margin:0; padding:0;}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter', sans-serif;
+  min-height:100vh;
+  padding:36px 40px 70px;
+}
+
+.wrap{ max-width:1240px; margin:0 auto; }
+
+/* ---------- Header ---------- */
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:34px;
+  gap:24px;
+}
+
+.title-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  cursor:pointer;
+}
+.title-row h1{
+  font-size:26px;
+  font-weight:800;
+  letter-spacing:-0.01em;
+}
+.title-row svg{ color:var(--text-dim); margin-top:3px; }
+.subtitle{
+  color:var(--text-dim);
+  font-size:13.5px;
+  margin-top:6px;
+  cursor:pointer;
+}
+
+.header-actions{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-shrink:0;
+}
+
+.search-box{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:9px 12px;
+  min-width:220px;
+}
+.search-box svg{ color:var(--text-faint); flex-shrink:0; }
+.search-box input{
+  background:none;
+  border:none;
+  outline:none;
+  color:var(--text);
+  font-size:13px;
+  width:100%;
+  font-family:'Inter', sans-serif;
+}
+.search-box input::placeholder{ color:var(--text-faint); }
+.kbd{
+  font-size:11px;
+  color:var(--text-faint);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:1px 5px;
+  flex-shrink:0;
+}
+
+.btn-orange-outline{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  background:var(--orange-dim);
+  border:1px solid var(--orange);
+  color:var(--orange);
+  font-size:13px;
+  font-weight:600;
+  padding:9px 16px;
+  border-radius:8px;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background .15s;
+}
+.btn-orange-outline:hover{ background:#4a3520; }
+
+/* ---------- Phases ---------- */
+.section-label{
+  font-size:15px;
+  font-weight:700;
+  margin-bottom:14px;
+}
+
+.rail{
+  display:flex;
+  align-items:center;
+  gap:0;
+  overflow-x:auto;
+  padding-bottom:6px;
+  margin-bottom:32px;
+}
+
+.phase-card{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:200px;
+  background:var(--panel);
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  padding:14px 16px;
+  cursor:pointer;
+  flex-shrink:0;
+  transition:border-color .15s, background .15s;
+  position:relative;
+}
+.phase-card:hover{ border-color:#3a3d47; }
+.phase-card.locked{ cursor:not-allowed; opacity:0.75; }
+.phase-card.locked:hover{ border-color:var(--border); }
+.phase-card.active{
+  border-color:var(--orange);
+  background:linear-gradient(180deg, rgba(245,137,58,0.10), rgba(245,137,58,0.03));
+  box-shadow:0 0 0 1px var(--orange);
+}
+.phase-card.done{ border-color:#2c5945; }
+
+.phase-icon{
+  width:38px; height:38px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  border:1.5px solid var(--border);
+  color:var(--text-faint);
+}
+.phase-card.done .phase-icon{ background:var(--green); border-color:var(--green); color:#06251B; }
+.phase-card.active .phase-icon{ border-color:var(--orange); color:var(--orange); }
+.phase-card.locked .phase-icon{ color:var(--text-faint); }
+
+.phase-text{ min-width:0; }
+.phase-num{
+  font-size:11px;
+  color:var(--text-faint);
+  font-weight:600;
+  margin-bottom:1px;
+}
+.phase-name{
+  font-size:14.5px;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.phase-status{
+  font-size:11.5px;
+  font-weight:600;
+  margin-top:2px;
+}
+.phase-status.st-done{ color:var(--green); }
+.phase-status.st-progress{ color:var(--orange); }
+.phase-status.st-locked{ color:var(--text-faint); }
+.phase-status.st-pending{ color:var(--text-dim); }
+
+.del-phase{
+  position:absolute;
+  top:-7px; right:-7px;
+  width:18px; height:18px;
+  border-radius:50%;
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  color:var(--text-faint);
+  font-size:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  opacity:0;
+  transition:opacity .15s;
+}
+.phase-card:hover .del-phase{ opacity:1; }
+.del-phase:hover{ color:#E0654F; border-color:#E0654F; }
+
+.connector-line{
+  width:34px;
+  height:2px;
+  flex-shrink:0;
+  background:var(--border);
+}
+.connector-line.done{ background:var(--green); }
+
+.add-phase-card{
+  min-width:130px;
+  border:1.5px dashed var(--border);
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  color:var(--text-faint);
+  cursor:pointer;
+  padding:14px;
+  flex-shrink:0;
+  font-size:13px;
+  font-weight:600;
+  transition:border-color .15s, color .15s;
+}
+.add-phase-card:hover{ border-color:var(--orange); color:var(--orange); }
+
+/* ---------- Lower grid ---------- */
+.lower{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px;
+  align-items:start;
+}
+
+.panel{
+  background:var(--panel);
+  border:1.5px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+}
+
+.topics-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:16px;
+}
+.topics-header h2{ font-size:16px; font-weight:700; }
+
+.add-topic-inline{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  background:var(--orange-dim);
+  border:1px solid var(--orange);
+  color:var(--orange);
+  font-size:12.5px;
+  font-weight:600;
+  padding:7px 13px;
+  border-radius:7px;
+  cursor:pointer;
+}
+.add-topic-inline:hover{ background:#4a3520; }
+
+.topics-list{ position:relative; }
+
+.topic-row{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  position:relative;
+}
+
+.timeline-col{
+  width:22px;
+  flex-shrink:0;
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.timeline-line{
+  position:absolute;
+  top:0; bottom:0;
+  width:2px;
+  background:var(--border);
+  left:50%;
+  transform:translateX(-50%);
+  z-index:0;
+}
+
+.dot{
+  width:22px; height:22px;
+  border-radius:50%;
+  border:2px solid var(--border-soft);
+  background:var(--panel);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:1;
+  margin-top:14px;
+  margin-bottom:14px;
+  flex-shrink:0;
+}
+.dot.completed{ background:var(--orange); border-color:var(--orange); color:#2A1706; }
+.dot.in_progress{ border-color:var(--orange); background:var(--panel); }
+.dot.in_progress::after{
+  content:'';
+  width:8px; height:8px;
+  border-radius:50%;
+  background:var(--orange);
+}
+
+.topic-card{
+  flex:1;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  background:var(--panel-2);
+  border:1.5px solid var(--border);
+  border-radius:9px;
+  padding:13px 15px;
+  margin-bottom:10px;
+  cursor:pointer;
+  transition:border-color .15s, background .15s;
+  min-width:0;
+}
+.topic-card:hover{ border-color:#3a3d47; }
+.topic-card.selected{
+  border-color:var(--orange);
+  background:linear-gradient(180deg, rgba(245,137,58,0.14), rgba(245,137,58,0.05));
+}
+
+.topic-text{ min-width:0; }
+.topic-name{
+  font-size:14px;
+  font-weight:700;
+  margin-bottom:3px;
+}
+.topic-card.completed .topic-name{ color:var(--text-dim); }
+.topic-desc{
+  font-size:12px;
+  color:var(--text-faint);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.topic-right{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-shrink:0;
+}
+
+.status-pill{
+  font-size:11px;
+  font-weight:700;
+  padding:4px 9px;
+  border-radius:20px;
+  white-space:nowrap;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  cursor:pointer;
+  user-select:none;
+}
+.status-pill.completed{ background:var(--orange-dim); color:var(--orange); border:1px solid var(--orange); }
+.status-pill.in_progress{ background:transparent; color:var(--orange); }
+.status-pill.in_progress::before{ content:''; width:6px; height:6px; border-radius:50%; background:var(--orange); }
+.status-pill.not_started{ background:transparent; color:var(--text-faint); border:1px solid var(--border); }
+
+.chevron-slot{ width:14px; color:var(--orange); flex-shrink:0; display:flex; }
+
+.del-topic{
+  color:var(--text-faint);
+  font-size:12px;
+  cursor:pointer;
+  opacity:0;
+  padding:2px 4px;
+  flex-shrink:0;
+}
+.topic-card:hover .del-topic{ opacity:1; }
+.del-topic:hover{ color:#E0654F; }
+
+.empty-state{
+  color:var(--text-faint);
+  font-size:13px;
+  text-align:center;
+  padding:36px 10px;
+  line-height:1.7;
+}
+
+.new-topic-input{
+  width:100%;
+  background:var(--panel-2);
+  border:1.5px dashed var(--border);
+  border-radius:9px;
+  padding:12px 15px;
+  color:var(--text);
+  font-size:13px;
+  font-family:'Inter', sans-serif;
+  margin-top:2px;
+}
+.new-topic-input:focus{ outline:none; border-color:var(--orange); border-style:solid; }
+.new-topic-input::placeholder{ color:var(--text-faint); }
+
+/* ---------- Detail panel ---------- */
+.detail-panel{
+  border-left:3px solid var(--orange);
+  border-radius:14px;
+  background:var(--panel);
+  border-top:1.5px solid var(--border);
+  border-right:1.5px solid var(--border);
+  border-bottom:1.5px solid var(--border);
+  padding:22px 24px;
+  min-height:300px;
+  display:flex;
+  flex-direction:column;
+  position:sticky;
+  top:24px;
+}
+
+.detail-empty{
+  margin:auto;
+  text-align:center;
+  color:var(--text-faint);
+  font-size:13px;
+  max-width:260px;
+  line-height:1.7;
+}
+
+.detail-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:14px;
+}
+.detail-title{
+  font-size:19px;
+  font-weight:800;
+  line-height:1.3;
+  padding-right:12px;
+}
+
+.detail-desc{
+  color:var(--text-dim);
+  font-size:13.5px;
+  line-height:1.7;
+  margin-bottom:20px;
+}
+textarea.detail-desc-edit{
+  width:100%;
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:12px 13px;
+  color:var(--text);
+  font-size:13.5px;
+  line-height:1.65;
+  font-family:'Inter', sans-serif;
+  resize:vertical;
+  min-height:80px;
+  margin-bottom:20px;
+}
+textarea.detail-desc-edit:focus{ outline:none; border-color:var(--orange); }
+textarea.detail-desc-edit::placeholder{ color:var(--text-faint); }
+
+.ka-header{
+  font-size:13px;
+  font-weight:700;
+  margin-bottom:10px;
+}
+.ka-list{
+  list-style:none;
+  margin-bottom:10px;
+}
+.ka-list li{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  font-size:13px;
+  color:var(--text-dim);
+  padding:5px 0;
+}
+.ka-list li .bullet{
+  width:6px; height:6px;
+  border-radius:50%;
+  background:var(--orange);
+  margin-top:6px;
+  flex-shrink:0;
+}
+.ka-list li .ka-text{ flex:1; }
+.ka-list li .ka-del{
+  color:var(--text-faint);
+  cursor:pointer;
+  font-size:11px;
+  opacity:0;
+  padding:2px 4px;
+}
+.ka-list li:hover .ka-del{ opacity:1; }
+.ka-list li .ka-del:hover{ color:#E0654F; }
+
+.ka-add{
+  width:100%;
+  background:var(--panel-2);
+  border:1px dashed var(--border);
+  border-radius:7px;
+  padding:8px 11px;
+  color:var(--text);
+  font-size:12.5px;
+  font-family:'Inter', sans-serif;
+  margin-bottom:22px;
+}
+.ka-add:focus{ outline:none; border-color:var(--orange); border-style:solid; }
+.ka-add::placeholder{ color:var(--text-faint); }
+
+.mark-complete-btn{
+  width:100%;
+  background:var(--orange);
+  border:none;
+  color:#241202;
+  font-size:14px;
+  font-weight:700;
+  padding:14px;
+  border-radius:9px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  margin-top:auto;
+  transition:background .15s;
+}
+.mark-complete-btn:hover{ background:#ff9c50; }
+.mark-complete-btn.is-done{ background:var(--orange-dim); color:var(--orange); border:1.5px solid var(--orange); }
+
+.hint-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  justify-content:center;
+  margin-top:10px;
+  color:var(--text-faint);
+  font-size:11.5px;
+}
+
+/* ---------- Documents ---------- */
+.docs-panel{ margin-top:22px; }
+
+.docs-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.doc-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  background:var(--panel-2);
+  border:1.5px solid var(--border);
+  border-radius:9px;
+  padding:11px 14px;
+}
+
+.doc-icon{
+  width:34px; height:34px;
+  border-radius:8px;
+  background:var(--orange-dim);
+  color:var(--orange);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+
+.doc-text{ flex:1; min-width:0; }
+.doc-name{
+  font-size:13.5px;
+  font-weight:600;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.doc-meta{
+  font-size:11.5px;
+  color:var(--text-faint);
+  margin-top:2px;
+}
+
+.doc-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-shrink:0;
+}
+.doc-btn{
+  width:30px; height:30px;
+  border-radius:7px;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--text-dim);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:border-color .15s, color .15s;
+  text-decoration:none;
+}
+.doc-btn:hover{ border-color:var(--orange); color:var(--orange); }
+.doc-btn.danger:hover{ border-color:#E0654F; color:#E0654F; }
+
+.toast{
+  position:fixed;
+  bottom:20px; right:20px;
+  background:var(--panel-2);
+  border:1px solid #E0654F;
+  color:var(--text);
+  padding:10px 16px;
+  border-radius:8px;
+  font-size:12px;
+  display:none;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title-row" id="titleRow">
+        <h1 id="mainTitle">Project Launch Plan</h1>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="subtitle" id="subtitle">Break down the launch plan into manageable phases and topics.</div>
+    </div>
+    <div class="header-actions">
+      <div class="search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Search...">
+      </div>
+      <div class="btn-orange-outline" id="addPhaseBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Phase
+      </div>
+    </div>
+  </header>
+
+  <div class="section-label">Phases</div>
+  <div class="rail" id="rail"></div>
+
+  <div class="lower">
+    <div class="panel">
+      <div class="topics-header">
+        <h2 id="topicsPhaseName">Topics</h2>
+        <div class="add-topic-inline" id="addTopicBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Topic
+        </div>
+      </div>
+      <div class="topics-list" id="topicsList"></div>
+    </div>
+
+    <div class="detail-panel" id="detailPanel"></div>
+  </div>
+
+  <div class="panel docs-panel">
+    <div class="topics-header">
+      <h2 id="docsPhaseName">Documents</h2>
+      <div class="add-topic-inline" id="addDocBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        Add Document
+      </div>
+      <input type="file" id="docFileInput" multiple style="display:none;">
+    </div>
+    <div class="docs-list" id="docsList"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Couldn't save — storage error</div>
+
+<script>
+const STATE_KEY = 'phase-tracker-v2:state';
+const API_KEY_STORAGE = 'workflow-manager:api-key';
+const API_URL = '/api/workflow';
+
+let state = null;
+let selectedPhaseId = null;
+let selectedTopicId = null;
+let addingTopic = false;
+let saveTimer = null;
+let searchQuery = '';
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+const defaultState = {
+  title:'Project Launch Plan',
+  subtitle:'Break down the launch plan into manageable phases and topics.',
+  phases:[
+    { id: uid(), name:'Clarification', documents:[], topics:[
+      { id: uid(), name:'Answer every open question', description:'Go through the unresolved list and turn each item into a concrete, agreed answer. No question carries into Phase 2 unresolved.', status:'not_started', activities:['List every open question from the product doc','Assign an owner to each','Write down the agreed answer, not just the discussion'] },
+      { id: uid(), name:'Find contradictions', description:'Compare sections of the product doc against each other. Flag anywhere two parts imply different behaviour.', status:'not_started', activities:['Re-read the doc section by section','Note conflicting statements','Resolve each before moving on'] },
+      { id: uid(), name:'Challenge assumptions', description:'Stress-test the assumptions list — which ones are load-bearing, and which are actually guesses dressed up as decisions.', status:'not_started', activities:['List every unvalidated assumption','Mark which ones block the build if wrong'] },
+    ]},
+    { id: uid(), name:'Product Lock', documents:[], topics:[
+      { id: uid(), name:'Freeze the MVP scope', description:'Lock exactly what ships in v1. Anything not on this list is explicitly out.', status:'not_started', activities:['Write the final in-scope list','Write the explicit out-of-scope list'] },
+      { id: uid(), name:'No feature creep', description:'Any new idea from here forward gets parked in a backlog doc, not added to the build.', status:'not_started', activities:['Create a backlog doc for future ideas'] },
+    ]},
+    { id: uid(), name:'PRD', documents:[], topics:[
+      { id: uid(), name:'Write the product specification', description:'The source of truth. Should be understandable by someone who has never seen the earlier docs.', status:'not_started', activities:['Draft the PRD','Review for gaps','Circulate for sign-off'] },
+    ]},
+    { id: uid(), name:'Technical Design', documents:[], topics:[
+      { id: uid(), name:'System architecture', description:'Frontend → Backend → Instagram API → Database → LLM → AI Coach. Draw the full data flow.', status:'not_started', activities:['Diagram the full stack','Confirm each integration point'] },
+      { id: uid(), name:'Database schema', description:'Every table, every relationship, every column.', status:'not_started', activities:['List all entities','Define relationships','Review with fresh eyes'] },
+      { id: uid(), name:'API design', description:'Every endpoint, method, and payload shape.', status:'not_started', activities:['List all endpoints','Define request/response shapes'] },
+      { id: uid(), name:'AI flow', description:'Exactly what happens: Import → Analyse → Store → Update Playbook → Generate Recommendation.', status:'not_started', activities:['Map each step','Define what is deterministic vs. LLM-driven'] },
+      { id: uid(), name:'Folder structure', description:'Every folder, every service, every model.', status:'not_started', activities:[] },
+      { id: uid(), name:'UI spec', description:'Every page, every button, every card, every modal.', status:'not_started', activities:[] },
+      { id: uid(), name:'Development roadmap', description:'Week 1 build X, Week 2 build Y, Week 3 build Z.', status:'not_started', activities:[] },
+    ]},
+    { id: uid(), name:'Build', documents:[], topics:[
+      { id: uid(), name:'Implement only what was designed', description:'Nothing gets invented while coding. If something is missing, it goes back to Technical Design.', status:'not_started', activities:[] },
+    ]},
+    { id: uid(), name:'Beta', documents:[], topics:[
+      { id: uid(), name:'Recruit pilot creators', description:'Start smaller than you think, expand once the core loop survives contact with real data.', status:'not_started', activities:[] },
+      { id: uid(), name:'Collect feedback', description:'Structured feedback on the diagnosis, recommendations, and coaching quality.', status:'not_started', activities:[] },
+      { id: uid(), name:'Fix bugs', description:'Prioritise anything that breaks the core loop.', status:'not_started', activities:[] },
+      { id: uid(), name:'Improve coaching quality', description:'Iterate on prompts and thresholds based on real feedback.', status:'not_started', activities:[] },
+    ]},
+    { id: uid(), name:'Launch', documents:[], topics:[
+      { id: uid(), name:'Founding members offer', description:'Early pricing to get committed first users in the door.', status:'not_started', activities:[] },
+      { id: uid(), name:'Collect testimonials', description:'Real quotes from creators who saw results.', status:'not_started', activities:[] },
+      { id: uid(), name:'Move to standard pricing', description:'Once value and testimonials are in hand, move off the founding-member rate.', status:'not_started', activities:[] },
+    ]},
+  ]
+};
+
+function migrateTopic(t){
+  if(t.status === undefined){
+    t.status = t.completed ? 'completed' : 'not_started';
+  }
+  if(t.activities === undefined) t.activities = [];
+  delete t.completed;
+  return t;
+}
+
+function migratePhase(p){
+  if(p.documents === undefined) p.documents = [];
+  return p;
+}
+
+async function loadState(){
+  try{
+    const response = await apiRequest(API_URL);
+    const payload = await response.json();
+    if(response.ok && payload.workflow){
+      state = payload.workflow;
+      state.phases.forEach(p => { migratePhase(p); p.topics.forEach(migrateTopic); });
+      if(!state.title) state.title = defaultState.title;
+      if(!state.subtitle) state.subtitle = defaultState.subtitle;
+    } else {
+      const raw = localStorage.getItem(STATE_KEY);
+      state = raw ? JSON.parse(raw) : defaultState;
+      await persist();
+    }
+  } catch(e){
+    const raw = localStorage.getItem(STATE_KEY);
+    state = raw ? JSON.parse(raw) : defaultState;
+    showToast('Offline mode — changes will sync when the API is available.');
+  }
+  selectedPhaseId = state.phases[0] ? state.phases[0].id : null;
+  render();
+}
+
+function getApiKey(){
+  let key = localStorage.getItem(API_KEY_STORAGE);
+  if(!key){
+    key = prompt('Enter your private Workflow API key:');
+    if(key) localStorage.setItem(API_KEY_STORAGE, key.trim());
+  }
+  return key || '';
+}
+
+function apiRequest(url, options={}){
+  return fetch(url, {
+    ...options,
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':`Bearer ${getApiKey()}`,
+      ...(options.headers || {})
+    }
+  });
+}
+
+async function persist(){
+  try{
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+    const response = await apiRequest(API_URL, {
+      method:'PUT',
+      body:JSON.stringify({ workflow:state })
+    });
+    if(!response.ok){
+      if(response.status===401) localStorage.removeItem(API_KEY_STORAGE);
+      const result = await response.json().catch(()=>({}));
+      throw new Error(result.error || 'Online save failed.');
+    }
+  } catch(e){ showToast(`${e.message} A local backup was kept.`); }
+}
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persist, 350);
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  if(msg) t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(()=>{ t.style.display='none'; }, 3500);
+}
+
+function icons(name){
+  const map = {
+    check:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>',
+    list:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+    lock:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+    rocket:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>',
+    chev:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"/></svg>',
+    file:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    download:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    trash:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+  };
+  return map[name] || '';
+}
+
+function phaseIsComplete(phase){
+  return phase.topics.length > 0 && phase.topics.every(t=>t.status==='completed');
+}
+function phaseUnlocked(idx){
+  return true;
+}
+function overallProgress(){
+  const all = state.phases.flatMap(p=>p.topics);
+  if(!all.length) return 0;
+  return Math.round((all.filter(t=>t.status==='completed').length/all.length)*100);
+}
+
+function render(){
+  renderRail();
+  renderTopics();
+  renderDetail();
+  renderDocuments();
+}
+
+function renderRail(){
+  const rail = document.getElementById('rail');
+  rail.innerHTML = '';
+  state.phases.forEach((phase, i)=>{
+    if(i>0){
+      const prevDone = phaseIsComplete(state.phases[i-1]);
+      const line = document.createElement('div');
+      line.className = 'connector-line' + (prevDone ? ' done' : '');
+      rail.appendChild(line);
+    }
+    const unlocked = phaseUnlocked(i);
+    const done = phaseIsComplete(phase);
+    const isLast = i === state.phases.length - 1;
+
+    let statusText, statusClass, iconName;
+    if(done){ statusText='Completed'; statusClass='st-done'; iconName='check'; }
+    else if(!unlocked){ statusText='Locked'; statusClass='st-locked'; iconName = isLast ? 'rocket' : 'lock'; }
+    else {
+      const anyProgress = phase.topics.some(t=>t.status!=='not_started');
+      statusText = anyProgress ? 'In Progress' : 'Not Started';
+      statusClass = anyProgress ? 'st-progress' : 'st-pending';
+      iconName = 'list';
+    }
+
+    const card = document.createElement('div');
+    card.className = 'phase-card' + (done ? ' done' : '') + (!unlocked ? ' locked' : '') + (phase.id===selectedPhaseId && unlocked ? ' active' : '');
+    card.innerHTML = `
+      <span class="del-phase" title="Delete phase">✕</span>
+      <div class="phase-icon">${icons(iconName)}</div>
+      <div class="phase-text">
+        <div class="phase-num">${i+1}</div>
+        <div class="phase-name">${escapeHtml(phase.name)}</div>
+        <div class="phase-status ${statusClass}">${statusText}</div>
+      </div>
+    `;
+    card.addEventListener('click',(e)=>{
+      if(e.target.classList.contains('del-phase')){ e.stopPropagation(); deletePhase(phase.id); return; }
+      if(!unlocked) return;
+      selectedPhaseId = phase.id;
+      selectedTopicId = null;
+      addingTopic = false;
+      render();
+    });
+    rail.appendChild(card);
+  });
+
+  const addCard = document.createElement('div');
+  addCard.className = 'add-phase-card';
+  addCard.innerHTML = `${icons('list').replace('16','15')} New Phase`;
+  addCard.addEventListener('click', addPhase);
+  rail.appendChild(addCard);
+}
+
+function renderTopics(){
+  const list = document.getElementById('topicsList');
+  const heading = document.getElementById('topicsPhaseName');
+  list.innerHTML = '';
+
+  const phase = state.phases.find(p=>p.id===selectedPhaseId);
+  if(!phase){
+    heading.textContent = 'Topics';
+    list.innerHTML = `<div class="empty-state">Select an unlocked phase above to see its topics.</div>`;
+    return;
+  }
+  heading.textContent = phase.name;
+
+  const q = searchQuery.trim().toLowerCase();
+  const visibleTopics = q ? phase.topics.filter(t => t.name.toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q)) : phase.topics;
+
+  if(phase.topics.length === 0){
+    list.innerHTML = `<div class="empty-state">No topics yet. Click "Add Topic" to create the first one.</div>`;
+  } else if(visibleTopics.length === 0){
+    list.innerHTML = `<div class="empty-state">No topics match "${escapeHtml(searchQuery)}".</div>`;
+  }
+
+  visibleTopics.forEach(topic=>{
+    const row = document.createElement('div');
+    row.className = 'topic-row';
+    const isSelected = topic.id === selectedTopicId;
+    row.innerHTML = `
+      <div class="timeline-col">
+        <div class="timeline-line"></div>
+        <div class="dot ${topic.status}">${topic.status==='completed' ? icons('check').replace('18','12') : ''}</div>
+      </div>
+      <div class="topic-card ${topic.status} ${isSelected ? 'selected':''}">
+        <div class="topic-text">
+          <div class="topic-name">${escapeHtml(topic.name)}</div>
+          <div class="topic-desc">${escapeHtml(topic.description || 'No description yet')}</div>
+        </div>
+        <div class="topic-right">
+          <span class="del-topic" title="Delete topic">✕</span>
+          <span class="status-pill ${topic.status}">${statusLabel(topic.status)}</span>
+          <span class="chevron-slot">${isSelected ? icons('chev') : ''}</span>
+        </div>
+      </div>
+    `;
+    row.querySelector('.topic-card').addEventListener('click',(e)=>{
+      if(e.target.closest('.del-topic')){ e.stopPropagation(); deleteTopic(phase.id, topic.id); return; }
+      if(e.target.closest('.status-pill')){ e.stopPropagation(); cycleStatus(topic); return; }
+      selectedTopicId = topic.id;
+      render();
+    });
+    list.appendChild(row);
+  });
+
+  if(addingTopic){
+    const input = document.createElement('input');
+    input.className = 'new-topic-input';
+    input.placeholder = 'Topic name — press Enter to add, Esc to cancel';
+    list.appendChild(input);
+    setTimeout(()=>input.focus(), 0);
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        const val = e.target.value.trim();
+        if(val){
+          phase.topics.push({ id: uid(), name: val, description:'', status:'not_started', activities:[] });
+          scheduleSave();
+        }
+        addingTopic = false;
+        render();
+      } else if(e.key === 'Escape'){
+        addingTopic = false;
+        render();
+      }
+    });
+    input.addEventListener('blur', ()=>{ addingTopic = false; render(); });
+  }
+}
+
+function statusLabel(s){
+  if(s==='completed') return 'Completed';
+  if(s==='in_progress') return 'In Progress';
+  return 'Not Started';
+}
+
+function cycleStatus(topic){
+  const order = ['not_started','in_progress','completed'];
+  const next = order[(order.indexOf(topic.status)+1) % order.length];
+  topic.status = next;
+  render();
+  scheduleSave();
+}
+
+function renderDetail(){
+  const panel = document.getElementById('detailPanel');
+  const phase = state.phases.find(p=>p.id===selectedPhaseId);
+  const topic = phase ? phase.topics.find(t=>t.id===selectedTopicId) : null;
+
+  if(!topic){
+    panel.innerHTML = `<div class="detail-empty">${icons('list').replace('16','28')}<div style="margin-top:10px;">Click a topic on the left to open its detail here.</div></div>`;
+    return;
+  }
+
+  panel.innerHTML = `
+    <div class="detail-top">
+      <div class="detail-title">${escapeHtml(topic.name)}</div>
+      <span class="status-pill ${topic.status}" id="detailStatusPill" style="cursor:pointer;">${statusLabel(topic.status)}</span>
+    </div>
+    <textarea class="detail-desc-edit" id="descBox" placeholder="What does this topic actually involve?">${escapeHtml(topic.description||'')}</textarea>
+    <div class="ka-header">Key Activities</div>
+    <ul class="ka-list" id="kaList"></ul>
+    <input class="ka-add" id="kaAdd" placeholder="Add a key activity — press Enter">
+    <button class="mark-complete-btn ${topic.status==='completed' ? 'is-done':''}" id="markBtn">
+      ${icons('check').replace('18','16')} ${topic.status==='completed' ? 'Completed' : 'Mark Complete'}
+    </button>
+    <div class="hint-row">Marking this topic complete will update your progress.</div>
+  `;
+
+  const kaList = document.getElementById('kaList');
+  topic.activities.forEach((act, idx)=>{
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="bullet"></span><span class="ka-text">${escapeHtml(act)}</span><span class="ka-del">✕</span>`;
+    li.querySelector('.ka-del').addEventListener('click', ()=>{
+      topic.activities.splice(idx,1);
+      render();
+      selectedTopicId = topic.id;
+      scheduleSave();
+    });
+    kaList.appendChild(li);
+  });
+
+  document.getElementById('descBox').addEventListener('input',(e)=>{
+    topic.description = e.target.value;
+    scheduleSave();
+  });
+
+  document.getElementById('kaAdd').addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'){
+      const val = e.target.value.trim();
+      if(val){
+        topic.activities.push(val);
+        scheduleSave();
+        render();
+        selectedTopicId = topic.id;
+      }
+    }
+  });
+
+  document.getElementById('markBtn').addEventListener('click', ()=>{
+    topic.status = topic.status === 'completed' ? 'not_started' : 'completed';
+    render();
+    selectedTopicId = topic.id;
+    scheduleSave();
+  });
+  document.getElementById('detailStatusPill').addEventListener('click', ()=>{
+    cycleStatus(topic);
+    selectedTopicId = topic.id;
+  });
+}
+
+function addPhase(){
+  const name = prompt('Phase name:');
+  if(!name || !name.trim()) return;
+  const phase = { id: uid(), name: name.trim(), topics: [], documents: [] };
+  state.phases.push(phase);
+  selectedPhaseId = phase.id;
+  selectedTopicId = null;
+  render();
+  scheduleSave();
+}
+function deletePhase(id){
+  if(!confirm('Delete this phase and all its topics?')) return;
+  state.phases = state.phases.filter(p=>p.id!==id);
+  if(selectedPhaseId===id){ selectedPhaseId = state.phases[0] ? state.phases[0].id : null; selectedTopicId=null; }
+  render();
+  scheduleSave();
+}
+function deleteTopic(phaseId, topicId){
+  const phase = state.phases.find(p=>p.id===phaseId);
+  phase.topics = phase.topics.filter(t=>t.id!==topicId);
+  if(selectedTopicId===topicId) selectedTopicId = null;
+  render();
+  scheduleSave();
+}
+
+function formatBytes(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function renderDocuments(){
+  const list = document.getElementById('docsList');
+  const heading = document.getElementById('docsPhaseName');
+  const phase = state.phases.find(p=>p.id===selectedPhaseId);
+  list.innerHTML = '';
+
+  if(!phase){
+    heading.textContent = 'Documents';
+    list.innerHTML = `<div class="empty-state">Select a phase above to see and add its documents.</div>`;
+    return;
+  }
+  heading.textContent = `Documents — ${phase.name}`;
+
+  if(!phase.documents || phase.documents.length === 0){
+    list.innerHTML = `<div class="empty-state">No documents attached to this phase yet.</div>`;
+    return;
+  }
+
+  phase.documents.forEach(doc=>{
+    const row = document.createElement('div');
+    row.className = 'doc-row';
+    row.innerHTML = `
+      <div class="doc-icon">${icons('file')}</div>
+      <div class="doc-text">
+        <div class="doc-name">${escapeHtml(doc.name)}</div>
+        <div class="doc-meta">${formatBytes(doc.size)}</div>
+      </div>
+      <div class="doc-actions">
+        <a class="doc-btn" href="${doc.dataUrl}" download="${escapeHtml(doc.name)}" title="Download">${icons('download')}</a>
+        <button class="doc-btn danger" title="Remove" data-id="${doc.id}">${icons('trash')}</button>
+      </div>
+    `;
+    row.querySelector('.danger').addEventListener('click', ()=> deleteDocument(phase.id, doc.id));
+    list.appendChild(row);
+  });
+}
+
+function addDocuments(fileList){
+  const phase = state.phases.find(p=>p.id===selectedPhaseId);
+  if(!phase || !fileList.length) return;
+  const MAX_SIZE = 750 * 1024; // Keep API requests inside free serverless limits.
+  const readers = [];
+
+  Array.from(fileList).forEach(file=>{
+    if(file.size > MAX_SIZE){
+      showToast(`"${file.name}" is over 750KB and was skipped.`);
+      return;
+    }
+    readers.push(new Promise((resolve)=>{
+      const reader = new FileReader();
+      reader.onload = () => resolve({ id: uid(), name: file.name, size: file.size, dataUrl: reader.result });
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    }));
+  });
+
+  Promise.all(readers).then(results=>{
+    results.filter(Boolean).forEach(doc => phase.documents.push(doc));
+    render();
+    try{
+      persist();
+    } catch(e){
+      showToast('Could not save — the file(s) may be too large for local storage.');
+    }
+  });
+}
+
+function deleteDocument(phaseId, docId){
+  const phase = state.phases.find(p=>p.id===phaseId);
+  phase.documents = phase.documents.filter(d=>d.id!==docId);
+  render();
+  scheduleSave();
+}
+
+document.getElementById('addTopicBtn').addEventListener('click', ()=>{
+  if(!selectedPhaseId) return;
+  addingTopic = true;
+  render();
+});
+document.getElementById('addDocBtn').addEventListener('click', ()=>{
+  if(!selectedPhaseId){ showToast('Select a phase first.'); return; }
+  document.getElementById('docFileInput').click();
+});
+document.getElementById('docFileInput').addEventListener('change', (e)=>{
+  addDocuments(e.target.files);
+  e.target.value = '';
+});
+document.getElementById('searchInput').addEventListener('input',(e)=>{
+  searchQuery = e.target.value;
+  renderTopics();
+});
+document.getElementById('titleRow').addEventListener('click', ()=>{
+  const val = prompt('Title:', state.title);
+  if(val && val.trim()){ state.title = val.trim(); document.getElementById('mainTitle').textContent = state.title; scheduleSave(); }
+});
+document.getElementById('subtitle').addEventListener('click', ()=>{
+  const val = prompt('Subtitle:', state.subtitle);
+  if(val !== null){ state.subtitle = val.trim(); document.getElementById('subtitle').textContent = state.subtitle; scheduleSave(); }
+});
+document.getElementById('addPhaseBtn').addEventListener('click', addPhase);
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : str;
+  return div.innerHTML;
+}
+
+loadState().then(()=>{
+  document.getElementById('mainTitle').textContent = state.title;
+  document.getElementById('subtitle').textContent = state.subtitle;
+});
+</script>
+</body>
+</html>
