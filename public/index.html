@@ -297,10 +297,13 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
+import { readApiJson } from './client-response.js';
+
 const STATE_KEY = 'mountain-scope:v2-curriculum';
 const API_URL = '/api/workflow';
 const TOPIC_STATES = ['complete','partial','not_verified','missing'];
+const MAX_PDF_BYTES = 3 * 1024 * 1024;
 
 let state = null;
 let selectedTopicId = null;
@@ -341,24 +344,6 @@ function apiRequest(url, options={}){
     ...options,
     headers:{ 'Content-Type':'application/json', ...(options.headers||{}) }
   });
-}
-
-async function readApiJson(response, fallbackMessage){
-  const responseText = await response.text();
-  let payload = null;
-  if(responseText){
-    try{
-      payload = JSON.parse(responseText);
-    }catch(error){
-      if(!response.ok) throw new Error(`${fallbackMessage} (${response.status}): ${responseText}`);
-      throw new Error(`Server returned invalid JSON: ${responseText}`);
-    }
-  }
-  if(!response.ok){
-    const backendError = payload?.error || payload?.message || responseText || response.statusText || fallbackMessage;
-    throw new Error(`${fallbackMessage} (${response.status}): ${backendError}`);
-  }
-  return payload || {};
 }
 
 async function loadState(){
@@ -698,6 +683,12 @@ document.getElementById('editRepo').addEventListener('click',()=>{
 document.getElementById('curriculumFile').addEventListener('change',event=>{
   const file = event.target.files[0];
   if(!file) return;
+  if(/pdf$/i.test(file.name) && file.size > MAX_PDF_BYTES){
+    uploadedCurriculumFile = null;
+    event.target.value = '';
+    showToast('PDF is too large. Upload a PDF under 3 MB, or paste extracted curriculum text.');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = () => {
     if(!document.getElementById('curriculumTitle').value) document.getElementById('curriculumTitle').value = file.name.replace(/\.[^.]+$/,'');

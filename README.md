@@ -32,6 +32,8 @@ Set these server-side environment variables:
 
 Without `OPENAI_API_KEY`, curriculum import, resource discovery, AI chat, and repository verification return an error.
 
+Production PDF roadmap import accepts PDF uploads up to 3 MB. Larger PDFs are rejected before upload in the dashboard, and oversized API payloads return a JSON `413` when they reach the function; for larger curriculum sources, extract the relevant text and import that text instead.
+
 ## Architecture
 
 ```mermaid
