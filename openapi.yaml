@@ -1,18 +1,18 @@
 openapi: 3.1.0
 info:
-  title: Personal Workflow Manager
-  description: Read and update Jack's project workflow dashboard.
-  version: 1.0.0
+  title: Mountain Scope Curriculum Engine
+  description: Read, build, mentor and verify curriculum-driven learning roadmaps.
+  version: 2.0.0
 servers:
   - url: https://workflow-manage.vercel.app/api
 paths:
   /workflow:
     get:
       operationId: getWorkflow
-      summary: Read all phases, topics and progress before discussing or changing the plan.
+      summary: Read the full stored Mountain Scope state.
       responses:
         '200':
-          description: Current workflow
+          description: Current workflow and curriculum state
           content:
             application/json:
               schema:
@@ -32,10 +32,57 @@ paths:
                   $ref: '#/components/schemas/Workflow'
       responses:
         '200': { description: Workflow saved }
+  /curriculum:
+    get:
+      operationId: getCurriculum
+      summary: Read the stored curriculum and computed progress.
+      responses:
+        '200':
+          description: Stored curriculum
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  curriculum: { $ref: '#/components/schemas/Curriculum' }
+                  progress: { $ref: '#/components/schemas/Progress' }
+  /curriculum/import:
+    post:
+      operationId: importCurriculum
+      summary: Build and store a curriculum roadmap from structured curriculum text.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                title: { type: string }
+                text: { type: string }
+                sourceName: { type: string }
+                sourceType: { type: string }
+                confirmUpdate: { type: boolean }
+      responses:
+        '201': { description: Curriculum imported }
+        '409': { description: A newer curriculum differs from stored curriculum and requires confirmation }
+  /progress:
+    get:
+      operationId: getProgress
+      summary: Recalculate and return derived completion and progress intelligence.
+      responses:
+        '200':
+          description: Computed progress
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  progress: { $ref: '#/components/schemas/Progress' }
   /phases:
     post:
       operationId: addPhase
-      summary: Add a phase to the end of the workflow.
+      summary: Add a phase to the roadmap.
       requestBody:
         required: true
         content:
@@ -62,8 +109,17 @@ paths:
                 phase_id: { type: string }
                 name: { type: string }
                 description: { type: string }
-                status: { type: string, enum: [not_started, in_progress, completed] }
-                activities:
+                status: { $ref: '#/components/schemas/TopicStatus' }
+                objectives:
+                  type: array
+                  items: { type: string }
+                deliverables:
+                  type: array
+                  items: { type: string }
+                successCriteria:
+                  type: array
+                  items: { type: string }
+                keywords:
                   type: array
                   items: { type: string }
       responses:
@@ -71,7 +127,7 @@ paths:
   /topics/{topicId}:
     patch:
       operationId: updateTopic
-      summary: Update a topic description, activities, name or completion status.
+      summary: Update topic curriculum fields or verification status.
       parameters:
         - name: topicId
           in: path
@@ -86,50 +142,247 @@ paths:
               properties:
                 name: { type: string }
                 description: { type: string }
-                status: { type: string, enum: [not_started, in_progress, completed] }
-                activities:
+                status: { $ref: '#/components/schemas/TopicStatus' }
+                objectives:
                   type: array
                   items: { type: string }
+                deliverables:
+                  type: array
+                  items: { type: string }
+                successCriteria:
+                  type: array
+                  items: { type: string }
+                keywords:
+                  type: array
+                  items: { type: string }
+                notes: { type: string }
       responses:
         '200': { description: Topic updated }
+  /topics/{topicId}/resources:
+    get:
+      operationId: getTopicResources
+      summary: Generate dynamic resource links for a topic and return static resources.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Topic resources }
+  /topics/{topicId}/mentor:
+    post:
+      operationId: askTopicMentor
+      summary: Ask the topic mentor using stored curriculum context and previous audits.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question: { type: string }
+      responses:
+        '200': { description: Mentor reply }
+  /topics/{topicId}/audit:
+    post:
+      operationId: auditTopic
+      summary: Verify a topic against a GitHub repository and stored completion criteria.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repositoryUrl]
+              properties:
+                repositoryUrl: { type: string }
+      responses:
+        '200': { description: Evidence-based audit }
+  /topics/{topicId}/notes:
+    patch:
+      operationId: updateTopicNotes
+      summary: Update personal notes for a topic without changing the official curriculum.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes: { type: string }
+      responses:
+        '200': { description: Notes updated }
+  /topics/{topicId}/manual-override:
+    patch:
+      operationId: setManualOverride
+      summary: Mark or clear a transparent manual completion override.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                completed: { type: boolean }
+                reason: { type: string }
+      responses:
+        '200': { description: Manual override updated }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   schemas:
+    TopicStatus:
+      type: string
+      enum: [complete, partial, not_verified, missing]
+    Evidence:
+      type: object
+      properties:
+        criterion: { type: string }
+        met: { type: boolean }
+        detail: { type: string }
+    Audit:
+      type: object
+      properties:
+        id: { type: string }
+        repository: { type: string }
+        status: { $ref: '#/components/schemas/TopicStatus' }
+        completion: { type: number }
+        confidence: { type: number }
+        evidence:
+          type: array
+          items: { $ref: '#/components/schemas/Evidence' }
+        recommendedNextSteps:
+          type: array
+          items: { type: string }
+    Resource:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        url: { type: string }
+        type: { type: string }
     Topic:
       type: object
-      required: [id, name, description, status, activities]
+      required: [id, name, status]
       properties:
         id: { type: string }
         name: { type: string }
         description: { type: string }
-        status: { type: string, enum: [not_started, in_progress, completed] }
-        activities:
+        objectives:
           type: array
           items: { type: string }
-    Phase:
+        deliverables:
+          type: array
+          items: { type: string }
+        successCriteria:
+          type: array
+          items: { type: string }
+        keywords:
+          type: array
+          items: { type: string }
+        status: { $ref: '#/components/schemas/TopicStatus' }
+        completion: { type: number }
+        confidence: { type: number }
+        audit: { $ref: '#/components/schemas/Audit' }
+        notes: { type: string }
+        manualOverride:
+          type: object
+          properties:
+            completed: { type: boolean }
+            reason: { type: string }
+            updatedAt: { type: string }
+    Project:
       type: object
-      required: [id, name, topics]
       properties:
         id: { type: string }
         name: { type: string }
         topics:
           type: array
           items: { $ref: '#/components/schemas/Topic' }
-        documents:
+    Phase:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        projects:
+          type: array
+          items: { $ref: '#/components/schemas/Project' }
+        topics:
+          type: array
+          items: { $ref: '#/components/schemas/Topic' }
+    Curriculum:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        source:
+          type: object
+          additionalProperties: true
+        phases:
+          type: array
+          items: { $ref: '#/components/schemas/Phase' }
+        glossary:
           type: array
           items: { type: object, additionalProperties: true }
+        resources:
+          type: array
+          items: { $ref: '#/components/schemas/Resource' }
+    Progress:
+      type: object
+      properties:
+        overall: { type: number }
+        phases:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              completion: { type: number }
+        strongestTopics:
+          type: array
+          items: { type: string }
+        needsImprovement:
+          type: array
+          items: { type: string }
+        recommendedNextTopic: { type: string }
+        estimatedRemainingWork: { type: string }
     Workflow:
       type: object
       required: [title, subtitle, phases]
       properties:
         title: { type: string }
         subtitle: { type: string }
+        curriculum: { $ref: '#/components/schemas/Curriculum' }
         phases:
           type: array
           items: { $ref: '#/components/schemas/Phase' }
+        progress: { $ref: '#/components/schemas/Progress' }
+        repository:
+          type: object
+          additionalProperties: true
     WorkflowResponse:
       type: object
       properties:
