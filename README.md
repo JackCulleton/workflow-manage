@@ -83,22 +83,15 @@ npm install
 
 Create a Supabase project, then run `supabase.sql` in the Supabase SQL editor. Copy the project URL and service-role key.
 
-Create a private workflow API key:
-
-```bash
-openssl rand -hex 32
-```
-
 Configure these environment variables in Vercel:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `WORKFLOW_API_KEY`
 - `OPENAI_API_KEY`
 - optional `OPENAI_MODEL`
 - optional `GITHUB_TOKEN`
 
-Deploy the project to Vercel. When the dashboard first opens, it asks for `WORKFLOW_API_KEY`.
+Deploy the project to Vercel. AI features use the server-side `OPENAI_API_KEY`; the browser does not ask users for OpenAI or workflow API keys.
 
 ## Connect ChatGPT
 
@@ -107,8 +100,7 @@ Deploy the project to Vercel. When the dashboard first opens, it asks for `WORKF
 3. Enable Actions.
 4. Confirm `openapi.yaml` points at the deployed Vercel API.
 5. Paste the schema into the Action schema field.
-6. Set authentication to API Key, bearer format.
-7. Use the same `WORKFLOW_API_KEY`.
+6. Leave authentication disabled unless you add a separate server-side access-control layer.
 
 ## Local Verification
 
@@ -129,8 +121,8 @@ npm run dev
 - The Supabase table has Row Level Security enabled.
 - No public Supabase policies are created by `supabase.sql`.
 - The service-role key should only live in server-side environment variables.
-- Every API request requires the private bearer key.
-- The dashboard stores the private workflow API key in browser local storage after it is entered.
+- The OpenAI key should only live in server-side environment variables.
+- The dashboard never stores or prompts for OpenAI or workflow API keys.
 
 ## Remaining Limitations
 

@@ -253,10 +253,6 @@ paths:
       responses:
         '200': { description: Manual override updated }
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
   schemas:
     TopicStatus:
       type: string
@@ -392,5 +388,3 @@ components:
       type: object
       properties:
         workflow: { $ref: '#/components/schemas/Workflow' }
-security:
-  - bearerAuth: []

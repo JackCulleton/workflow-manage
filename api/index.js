@@ -17,11 +17,6 @@ function send(res, status, body) {
   res.status(status).json(body);
 }
 
-function authorised(req) {
-  const expected = process.env.WORKFLOW_API_KEY;
-  return Boolean(expected && req.headers.authorization === `Bearer ${expected}`);
-}
-
 function supabaseHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
@@ -55,10 +50,9 @@ async function writeState(state) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, PATCH, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
-  if (!authorised(req)) return send(res, 401, { error: 'Invalid or missing API key.' });
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return send(res, 500, { error: 'Storage is not configured.' });
   }

@@ -299,7 +299,6 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 
 <script>
 const STATE_KEY = 'mountain-scope:v2-curriculum';
-const API_KEY_STORAGE = 'workflow-manager:api-key';
 const API_URL = '/api/workflow';
 const TOPIC_STATES = ['complete','partial','not_verified','missing'];
 
@@ -337,19 +336,10 @@ function defaultState(){
   };
 }
 
-function getApiKey(){
-  let key = localStorage.getItem(API_KEY_STORAGE);
-  if(!key){
-    key = prompt('Enter your private Workflow API key:');
-    if(key) localStorage.setItem(API_KEY_STORAGE, key.trim());
-  }
-  return key || '';
-}
-
 function apiRequest(url, options={}){
   return fetch(url, {
     ...options,
-    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${getApiKey()}`, ...(options.headers||{}) }
+    headers:{ 'Content-Type':'application/json', ...(options.headers||{}) }
   });
 }
 
