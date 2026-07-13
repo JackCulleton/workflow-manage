@@ -12,14 +12,62 @@ import {
 } from '../lib/curriculum.js';
 
 const WORKFLOW_ID = 'main';
+const MAX_IMPORT_TEXT_CHARS = 300000;
+const MAX_IMPORT_FILE_DATA_CHARS = 18 * 1024 * 1024;
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb'
+    }
+  }
+};
 
 function send(res, status, body) {
   res.status(status).json(body);
 }
 
+function sendError(res, status, error) {
+  return send(res, status, { success: false, error });
+}
+
 function supabaseHeaders() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+}
+
+function contentLength(req) {
+  const length = Number(req.headers['content-length']);
+  return Number.isFinite(length) ? length : null;
+}
+
+function describeImportPayload(input = {}) {
+  const fileData = input.fileData ? String(input.fileData) : '';
+  const text = input.text ? String(input.text) : '';
+  return {
+    title: input.title || '',
+    fileName: input.fileName || '',
+    mimeType: input.mimeType || '',
+    hasFileData: Boolean(fileData),
+    fileDataChars: fileData.length,
+    textChars: text.length,
+    payloadKind: fileData ? 'base64 file data' : (text ? 'extracted or pasted text' : 'empty')
+  };
+}
+
+function validateImportPayload(input = {}) {
+  const text = input.text ? String(input.text) : '';
+  const fileData = input.fileData ? String(input.fileData) : '';
+  if (!text.trim() && !fileData) {
+    throw new Error('Curriculum text or PDF file data is required.');
+  }
+  if (text.length > MAX_IMPORT_TEXT_CHARS) {
+    throw new Error(`Curriculum text is too large (${text.length} characters). Paste a shorter extract or split the curriculum into smaller imports.`);
+  }
+  if (fileData.length > MAX_IMPORT_FILE_DATA_CHARS) {
+    throw new Error('Uploaded file is too large for roadmap import. Use a PDF under about 13 MB, or extract the relevant curriculum text and import that instead.');
+  }
+  return input;
 }
 
 async function storageError(action, response) {
@@ -54,12 +102,12 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, PATCH, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return send(res, 500, { error: 'Storage is not configured.' });
+    return sendError(res, 500, 'Storage is not configured.');
   }
 
-  try {
-    const path = new URL(req.url, 'https://workflow.local').pathname.replace(/^\/api/, '') || '/workflow';
+  const path = new URL(req.url, 'https://workflow.local').pathname.replace(/^\/api/, '') || '/workflow';
 
+  try {
     if (req.method === 'GET' && path === '/workflow') {
       const workflow = await readState();
       if (workflow) ensureCurriculumState(workflow);
@@ -72,7 +120,7 @@ export default async function handler(req, res) {
     }
 
     const state = await readState();
-    if (!state) return send(res, 409, { error: 'Open the dashboard once to initialise the workflow.' });
+    if (!state) return sendError(res, 409, 'Open the dashboard once to initialise the workflow.');
     ensureCurriculumState(state);
 
     if (req.method === 'GET' && path === '/curriculum') {
@@ -80,7 +128,14 @@ export default async function handler(req, res) {
       return send(res, 200, { curriculum: state.curriculum, progress: state.progress });
     }
     if (req.method === 'POST' && path === '/curriculum/import') {
-      const result = await importCurriculum(state, req.body || {});
+      const payload = validateImportPayload(req.body || {});
+      console.info('Curriculum import request', {
+        method: req.method,
+        path,
+        contentLength: contentLength(req),
+        ...describeImportPayload(payload)
+      });
+      const result = await importCurriculum(state, payload);
       if (result.needsConfirmation) return send(res, 409, result);
       await writeState(state);
       return send(res, 201, result);
@@ -92,13 +147,13 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST' && path === '/phases') {
-      if (!req.body || !req.body.name || !req.body.name.trim()) return send(res, 400, { error: 'Phase name is required.' });
+      if (!req.body || !req.body.name || !req.body.name.trim()) return sendError(res, 400, 'Phase name is required.');
       const phase = addPhase(state, req.body);
       await writeState(state);
       return send(res, 201, { phase, workflow: state });
     }
     if (req.method === 'POST' && path === '/topics') {
-      if (!req.body || !req.body.phase_id || !req.body.name || !req.body.name.trim()) return send(res, 400, { error: 'phase_id and name are required.' });
+      if (!req.body || !req.body.phase_id || !req.body.name || !req.body.name.trim()) return sendError(res, 400, 'phase_id and name are required.');
       const topic = addTopic(state, req.body);
       await writeState(state);
       return send(res, 201, { topic, workflow: state });
@@ -124,7 +179,7 @@ export default async function handler(req, res) {
     const resourcesMatch = path.match(/^\/topics\/([^/]+)\/resources$/);
     if (req.method === 'GET' && resourcesMatch) {
       const topic = findCurriculumTopic(state, resourcesMatch[1]);
-      if (!topic) return send(res, 404, { error: 'Topic not found.' });
+      if (!topic) return sendError(res, 404, 'Topic not found.');
       topic.resources.dynamic = await dynamicResourcesFor(topic, state.curriculum);
       await writeState(state);
       return send(res, 200, { resources: topic.resources, topic });
@@ -141,9 +196,18 @@ export default async function handler(req, res) {
       await writeState(state);
       return send(res, 200, result);
     }
-    return send(res, 404, { error: 'Endpoint not found.' });
+    return sendError(res, 404, 'Endpoint not found.');
   } catch (error) {
-    const status = /not found|required|must|contain|repository/i.test(error.message) ? 400 : 500;
-    return send(res, status, { error: error.message });
+    const status = /too large/i.test(error.message)
+      ? 413
+      : (/not found|required|must|contain|repository/i.test(error.message) ? 400 : 500);
+    console.error('API request failed', {
+      method: req.method,
+      path,
+      status,
+      contentLength: contentLength(req),
+      error: error && error.stack ? error.stack : String(error)
+    });
+    return sendError(res, status, error.message || 'Failed to build roadmap');
   }
 }

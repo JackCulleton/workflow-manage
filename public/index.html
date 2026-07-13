@@ -343,11 +343,29 @@ function apiRequest(url, options={}){
   });
 }
 
+async function readApiJson(response, fallbackMessage){
+  const responseText = await response.text();
+  let payload = null;
+  if(responseText){
+    try{
+      payload = JSON.parse(responseText);
+    }catch(error){
+      if(!response.ok) throw new Error(`${fallbackMessage} (${response.status}): ${responseText}`);
+      throw new Error(`Server returned invalid JSON: ${responseText}`);
+    }
+  }
+  if(!response.ok){
+    const backendError = payload?.error || payload?.message || responseText || response.statusText || fallbackMessage;
+    throw new Error(`${fallbackMessage} (${response.status}): ${backendError}`);
+  }
+  return payload || {};
+}
+
 async function loadState(){
   try{
     const response = await apiRequest(API_URL);
-    const payload = await response.json();
-    state = response.ok && payload.workflow ? migrate(payload.workflow) : migrate(readLocal() || defaultState());
+    const payload = await readApiJson(response, 'Load workflow failed');
+    state = payload.workflow ? migrate(payload.workflow) : migrate(readLocal() || defaultState());
     if(!payload.workflow) await persist();
   }catch(error){
     state = migrate(readLocal() || defaultState());
@@ -432,7 +450,7 @@ async function persist(){
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
   try{
     const response = await apiRequest(API_URL, { method:'PUT', body:JSON.stringify({workflow:state}) });
-    if(!response.ok) throw new Error((await response.json().catch(()=>({}))).error || 'Online save failed.');
+    await readApiJson(response, 'Online save failed');
   }catch(error){
     showToast(`${error.message} Local backup kept.`);
   }
@@ -528,8 +546,7 @@ async function renderResources(body, topic){
   body.innerHTML = '<div class="empty">Discovering current resources with AI search...</div>';
   try{
     const response = await apiRequest(`/api/topics/${topic.id}/resources`);
-    const payload = await response.json();
-    if(!response.ok) throw new Error(payload.error || 'Resource discovery failed.');
+    const payload = await readApiJson(response, 'Resource discovery failed');
     topic.resources = payload.resources;
   }catch(error){
     body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
@@ -563,8 +580,7 @@ function renderChat(body, topic){
     if(!question) return;
     try{
       const response = await apiRequest(`/api/topics/${topic.id}/mentor`, { method:'POST', body:JSON.stringify({question}) });
-      const payload = await response.json();
-      if(!response.ok) throw new Error(payload.error || 'Mentor request failed.');
+      const payload = await readApiJson(response, 'Mentor request failed');
       Object.assign(topic, payload.topic);
       localStorage.setItem(STATE_KEY, JSON.stringify(state));
     }catch(error){
@@ -595,8 +611,7 @@ function renderVerify(body, topic){
     state.repository = { url: repositoryUrl };
     try{
       const response = await apiRequest(`/api/topics/${topic.id}/audit`, { method:'POST', body:JSON.stringify({repositoryUrl}) });
-      const payload = await response.json();
-      if(!response.ok) throw new Error(payload.error || 'Audit failed.');
+      const payload = await readApiJson(response, 'Audit failed');
       Object.assign(topic, payload.topic);
       state.progress = payload.progress || calculateProgress(state);
       localStorage.setItem(STATE_KEY, JSON.stringify(state));
@@ -638,23 +653,24 @@ async function importCurriculum(){
   const text = document.getElementById('curriculumText').value.trim();
   if(!text && !uploadedCurriculumFile){ showToast('Curriculum text or PDF is required.'); return; }
   const title = document.getElementById('curriculumTitle').value.trim();
+  const isPdfUpload = uploadedCurriculumFile && /pdf$/i.test(uploadedCurriculumFile.name);
+  const payload = {
+    title,
+    text: isPdfUpload ? '' : text,
+    fileName: uploadedCurriculumFile && uploadedCurriculumFile.name,
+    mimeType: uploadedCurriculumFile && uploadedCurriculumFile.type,
+    fileData: isPdfUpload ? uploadedCurriculumFile.dataUrl : null,
+    sourceName: uploadedCurriculumFile ? uploadedCurriculumFile.name : 'Dashboard import',
+    sourceType: uploadedCurriculumFile ? uploadedCurriculumFile.type : 'text',
+    confirmUpdate:true
+  };
   try{
     const response = await apiRequest('/api/curriculum/import', {
       method:'POST',
-      body:JSON.stringify({
-        title,
-        text,
-        fileName: uploadedCurriculumFile && uploadedCurriculumFile.name,
-        mimeType: uploadedCurriculumFile && uploadedCurriculumFile.type,
-        fileData: uploadedCurriculumFile && uploadedCurriculumFile.dataUrl,
-        sourceName: uploadedCurriculumFile ? uploadedCurriculumFile.name : 'Dashboard import',
-        sourceType: uploadedCurriculumFile ? uploadedCurriculumFile.type : 'text',
-        confirmUpdate:true
-      })
+      body:JSON.stringify(payload)
     });
-    const payload = await response.json();
-    if(!response.ok) throw new Error(payload.error || 'AI curriculum import failed.');
-    state = migrate(payload.workflow);
+    const data = await readApiJson(response, 'Build roadmap failed');
+    state = migrate(data.workflow);
   }catch(error){
     showToast(error.message);
     return;
