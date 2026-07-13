@@ -13,12 +13,12 @@ Mountain Scope originally explored learning-path organisation. The current Versi
 
 The active product now supports:
 
-- curriculum import
+- AI curriculum import
 - structured roadmaps
 - topic workspaces
-- resources
-- topic mentoring
-- repository audits
+- dynamic resource discovery
+- topic mentoring with full context
+- source-code repository audits
 - transparent manual overrides
 - calculated completion
 

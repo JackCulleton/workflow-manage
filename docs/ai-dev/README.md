@@ -9,18 +9,18 @@ Mountain Scope now treats AI as a set of responsibilities around a stored curric
 - progress evaluator
 - resource recommender
 
-The curriculum remains the source of truth. AI or deterministic helpers should never invent objectives or completion criteria.
+The curriculum remains the source of truth. AI should never invent objectives or completion criteria.
 
 ## Current Implementation
 
-The repository currently uses deterministic helpers in `lib/curriculum.js` and a Custom GPT Action schema in `openapi.yaml`.
+The repository uses `lib/ai.js` to call the OpenAI Responses API with structured outputs. Resource discovery uses the hosted web search tool. Repository verification sends source-code context to the model and requires evidence for every decision.
 
 The dashboard and API support:
 
-- structured curriculum import
-- topic mentoring from stored context
-- resource generation
-- evidence-first repository audits
+- AI structured curriculum import from text or PDF/file data
+- topic mentoring from stored curriculum, criteria, audit, notes, and repository context
+- dynamic resource discovery
+- evidence-first repository audits over source files
 - transparent manual overrides
 - calculated progress intelligence
 
@@ -30,4 +30,4 @@ The dashboard and API support:
 
 ## Future AI Work
 
-Future implementations can replace or extend deterministic helpers with hosted AI providers for robust PDF parsing, semantic code analysis, and richer mentoring. The data model and API are designed so those capabilities can be added without changing the core dashboard contract.
+Future implementations can add chunked background processing, vector retrieval, and richer private GitHub authorization without changing the core dashboard contract.

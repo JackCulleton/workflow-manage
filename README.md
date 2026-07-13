@@ -10,21 +10,27 @@ This repository implements the Version 2 curriculum workflow described in `v2_up
 
 Implemented now:
 
-- Curriculum Builder for pasted curriculum text and best-effort uploaded text/PDF reading in the browser.
+- AI Curriculum Builder for pasted curriculum text or uploaded PDFs.
 - Structured curriculum storage in the existing Supabase-backed workflow JSON.
 - Dashboard with overall completion, phase completion, progress intelligence, and selectable topics.
 - Topic workspace tabs: Overview, Resources, AI Chat, Verify, and Notes.
 - Four topic states: `complete`, `partial`, `not_verified`, and `missing`.
 - Manual completion override that remains separate from audit verification.
-- Dynamic resource links generated from the selected topic and keywords.
-- Topic mentor responses based on stored curriculum context and previous audit data.
-- Evidence-first repository audit endpoint for public GitHub repositories.
+- Dynamic resource discovery through AI web search.
+- Topic mentor responses generated from selected curriculum, topic criteria, previous audit data, notes, and repository context.
+- Evidence-first repository audit endpoint that sends actual source files, README content, and repository metadata to the LLM for comparison against stored criteria.
 - OpenAPI schema for Custom GPT Actions.
 - GPT instructions that require ChatGPT to read stored curriculum before advising.
 
-## Important Boundaries
+## AI Requirements
 
-The current implementation includes deterministic local engines and API endpoints. It does not yet include a hosted model provider, OCR-quality PDF extraction, or deep semantic code analysis. Repository audits inspect public GitHub metadata, README content, and file paths, then compare that evidence against stored topic criteria.
+Set these server-side environment variables:
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`, optional, defaults to `gpt-5.2`
+- `GITHUB_TOKEN`, optional, improves GitHub API rate limits and allows authenticated repository reads where the token has access
+
+Without `OPENAI_API_KEY`, curriculum import, resource discovery, AI chat, and repository verification return an error.
 
 ## Architecture
 
@@ -59,7 +65,8 @@ flowchart TD
 - `public/index.html` contains the curriculum dashboard and topic workspace.
 - `api/index.js` exposes protected workflow, curriculum, mentor, audit, notes, resources, and manual override routes.
 - `lib/workflow.js` keeps workflow validation and phase/topic mutations.
-- `lib/curriculum.js` contains curriculum parsing, progress calculation, mentoring, resources, manual override, and audit helpers.
+- `lib/curriculum.js` contains progress, manual override, GitHub source collection, and AI orchestration helpers.
+- `lib/ai.js` contains Responses API calls, structured output schemas, AI curriculum parsing, AI mentoring, AI resource discovery, and AI repository auditing.
 - `openapi.yaml` defines the Custom GPT Action schema.
 - `gpt-instructions.md` defines the GPT behaviour rules.
 - `supabase.sql` creates the Supabase storage table.
@@ -87,6 +94,9 @@ Configure these environment variables in Vercel:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `WORKFLOW_API_KEY`
+- `OPENAI_API_KEY`
+- optional `OPENAI_MODEL`
+- optional `GITHUB_TOKEN`
 
 Deploy the project to Vercel. When the dashboard first opens, it asks for `WORKFLOW_API_KEY`.
 
@@ -124,8 +134,7 @@ npm run dev
 
 ## Remaining Limitations
 
-- Uploaded PDFs are read with browser text reading only; scanned PDFs need OCR or a real PDF extraction service.
-- The mentor is deterministic unless a Custom GPT calls the API and reasons over the returned data.
-- Repository audits are evidence-based but shallow: metadata, README content, and file paths.
-- Private GitHub repository auditing is not implemented.
-- Automatic curriculum difference review is implemented at the API helper level, but the browser import flow replaces the active curriculum directly.
+- Very large PDFs or repositories may exceed request limits and need chunking or background jobs.
+- Repository verification samples source files to stay within model context limits.
+- Private GitHub repository auditing requires a `GITHUB_TOKEN` with access.
+- Automatic curriculum difference review is implemented at the API helper level, but the browser import flow currently confirms replacement directly.

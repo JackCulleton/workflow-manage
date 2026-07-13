@@ -86,7 +86,7 @@ export default async function handler(req, res) {
       return send(res, 200, { curriculum: state.curriculum, progress: state.progress });
     }
     if (req.method === 'POST' && path === '/curriculum/import') {
-      const result = importCurriculum(state, req.body || {});
+      const result = await importCurriculum(state, req.body || {});
       if (result.needsConfirmation) return send(res, 409, result);
       await writeState(state);
       return send(res, 201, result);
@@ -131,13 +131,13 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && resourcesMatch) {
       const topic = findCurriculumTopic(state, resourcesMatch[1]);
       if (!topic) return send(res, 404, { error: 'Topic not found.' });
-      topic.resources.dynamic = dynamicResourcesFor(topic);
+      topic.resources.dynamic = await dynamicResourcesFor(topic, state.curriculum);
       await writeState(state);
       return send(res, 200, { resources: topic.resources, topic });
     }
     const mentorMatch = path.match(/^\/topics\/([^/]+)\/mentor$/);
     if (req.method === 'POST' && mentorMatch) {
-      const result = mentorReply(state, mentorMatch[1], (req.body && req.body.question) || '');
+      const result = await mentorReply(state, mentorMatch[1], (req.body && req.body.question) || '');
       await writeState(state);
       return send(res, 200, result);
     }

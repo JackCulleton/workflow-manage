@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { addPhase, addTopic, updateTopic, validateState } from '../lib/workflow.js';
-import { calculateProgress, createCurriculumFromText, importCurriculum, setManualOverride } from '../lib/curriculum.js';
+import { calculateProgress, createCurriculumFromText, setManualOverride } from '../lib/curriculum.js';
 
 function state() { return { title: 'Plan', subtitle: '', phases: [] }; }
 
@@ -21,8 +21,8 @@ test('rejects an invalid topic status', () => {
   assert.throws(() => updateTopic(workflow, topic.id, { status: 'maybe' }), /status/);
 });
 
-test('builds a curriculum from structured text', () => {
-  const curriculum = createCurriculumFromText({
+test('curriculum building requires the configured AI provider', async () => {
+  await assert.rejects(() => createCurriculumFromText({
     title: 'Minishell',
     text: `
 Phase Parsing
@@ -33,28 +33,29 @@ Success Criteria: Handles quoted strings
 Keywords: parser, token
 Resource: https://example.com/minishell
 `
-  });
-  assert.equal(curriculum.title, 'Minishell');
-  assert.equal(curriculum.phases[0].name, 'Parsing');
-  assert.equal(curriculum.phases[0].topics[0].successCriteria[0], 'Handles quoted strings');
+  }), /OPENAI_API_KEY/);
 });
 
 test('calculates completion from topic evidence and manual overrides', () => {
-  const workflow = state();
-  importCurriculum(workflow, {
+  const workflow = {
     title: 'Curriculum',
-    text: `
-Phase Signals
-Topic Ctrl-C
-Success Criteria: SIGINT handled
-Topic Ctrl-D
-Success Criteria: EOF handled
-`,
-    confirmUpdate: true
-  });
+    subtitle: '',
+    phases: [],
+    curriculum: {
+      id: 'curriculum',
+      title: 'Curriculum',
+      phases: [{
+        id: 'signals',
+        name: 'Signals',
+        projects: [],
+        topics: [
+          { id: 'ctrl-c', name: 'Ctrl-C', status: 'partial', completion: 50, successCriteria: ['SIGINT handled'], objectives: [], deliverables: [] },
+          { id: 'ctrl-d', name: 'Ctrl-D', status: 'not_verified', completion: 0, successCriteria: ['EOF handled'], objectives: [], deliverables: [] }
+        ]
+      }]
+    }
+  };
   const topic = workflow.curriculum.phases[0].topics[0];
-  topic.status = 'partial';
-  topic.completion = 50;
   setManualOverride(workflow, workflow.curriculum.phases[0].topics[1].id, { completed: true, reason: 'Evaluator accepted it.' });
   assert.equal(calculateProgress(workflow).overall, 75);
   assert.equal(workflow.curriculum.phases[0].topics[1].manualOverride.completed, true);

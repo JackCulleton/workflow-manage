@@ -62,6 +62,11 @@ paths:
                 text: { type: string }
                 sourceName: { type: string }
                 sourceType: { type: string }
+                fileName: { type: string }
+                mimeType: { type: string }
+                fileData:
+                  type: string
+                  description: Base64 data URL for an uploaded curriculum file, such as a PDF.
                 confirmUpdate: { type: boolean }
       responses:
         '201': { description: Curriculum imported }

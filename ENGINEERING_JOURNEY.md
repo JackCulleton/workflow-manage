@@ -43,12 +43,12 @@ flowchart TD
 
 ## Implementation Choices
 
-- Deterministic parsing and auditing were added because no hosted AI provider exists in the current repo.
-- Repository audits are evidence-first and conservative.
+- AI parsing, resource discovery, mentoring, and auditing now use the OpenAI Responses API.
+- Repository audits collect actual source files and require evidence for every criterion.
 - Manual override is stored separately from audit data.
 - Old workflow states are migrated into curriculum-shaped state where possible.
 - The browser keeps local backup behaviour from the previous dashboard.
 
 ## Known Boundaries
 
-This implementation prepares the product for AI-backed parsing and auditing, but it does not pretend those providers exist yet. PDF extraction, deep code analysis, and private repository access remain future engineering work.
+This implementation requires `OPENAI_API_KEY` for AI features. Large-file chunking, deeper repository retrieval, and a richer private repository connection flow remain future engineering work.

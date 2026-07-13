@@ -259,7 +259,7 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
       </div>
       <div class="card">
         <h3>Accepted Structure</h3>
-        <p>Use headings such as Phase, Project, Topic, Objective, Deliverable, Success Criteria, Keywords and Resource. Uploaded text files are read directly. PDFs are stored with best-effort text reading in the browser.</p>
+        <p>Upload the official curriculum PDF or paste curriculum text. The server sends the document to the configured LLM so the roadmap is extracted from the source material.</p>
       </div>
     </div>
   </section>
@@ -307,6 +307,7 @@ let state = null;
 let selectedTopicId = null;
 let activeTab = 'overview';
 let saveTimer = null;
+let uploadedCurriculumFile = null;
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function now(){ return new Date().toISOString(); }
@@ -533,17 +534,24 @@ function renderOverview(body, topic){
   `;
 }
 
-function renderResources(body, topic){
-  const dynamic = dynamicResources(topic);
-  topic.resources.dynamic = dynamic;
-  const resources = [...(topic.resources.static||[]), ...dynamic];
+async function renderResources(body, topic){
+  body.innerHTML = '<div class="empty">Discovering current resources with AI search...</div>';
+  try{
+    const response = await apiRequest(`/api/topics/${topic.id}/resources`);
+    const payload = await response.json();
+    if(!response.ok) throw new Error(payload.error || 'Resource discovery failed.');
+    topic.resources = payload.resources;
+  }catch(error){
+    body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  const resources = [...(topic.resources.static||[]), ...(topic.resources.dynamic||[])];
   body.innerHTML = resources.length ? resources.map(resource=>`
     <div class="resource">
       <div><a href="${escapeAttr(resource.url || '#')}" target="_blank" rel="noreferrer">${escapeHtml(resource.title || resource.url || 'Resource')}</a></div>
       <span>${escapeHtml(resource.type || 'resource')}</span>
     </div>
   `).join('') : '<div class="empty">No resources yet.</div>';
-  scheduleSave();
 }
 
 function renderChat(body, topic){
@@ -563,9 +571,15 @@ function renderChat(body, topic){
   document.getElementById('askBtn').addEventListener('click', async()=>{
     const question = document.getElementById('chatQuestion').value.trim();
     if(!question) return;
-    const reply = localMentor(topic, question);
-    topic.chatHistory.push({ id:uid(), question, reply, createdAt:now() });
-    scheduleSave();
+    try{
+      const response = await apiRequest(`/api/topics/${topic.id}/mentor`, { method:'POST', body:JSON.stringify({question}) });
+      const payload = await response.json();
+      if(!response.ok) throw new Error(payload.error || 'Mentor request failed.');
+      Object.assign(topic, payload.topic);
+      localStorage.setItem(STATE_KEY, JSON.stringify(state));
+    }catch(error){
+      showToast(error.message);
+    }
     renderChat(body, topic);
   });
 }
@@ -596,10 +610,7 @@ function renderVerify(body, topic){
       Object.assign(topic, payload.topic);
       state.progress = payload.progress || calculateProgress(state);
       localStorage.setItem(STATE_KEY, JSON.stringify(state));
-    }catch(error){
-      showToast(`${error.message} Using local evidence scan.`);
-      applyLocalAudit(topic, repositoryUrl);
-    }
+    }catch(error){ showToast(error.message); }
     render();
   });
   document.getElementById('manualBtn').addEventListener('click',()=>{
@@ -627,110 +638,46 @@ function auditView(audit){
     ${(audit.evidence||[]).map(item=>`
       <div class="evidence">
         <div class="mark ${item.met?'ok':'no'}">${item.met?'OK':'MISS'}</div>
-        <div><strong>${escapeHtml(item.criterion)}</strong><p class="small">${escapeHtml(item.detail)}</p></div>
+        <div><strong>${escapeHtml(item.criterion)}</strong><p class="small">${escapeHtml(item.detail)}</p>${auditFiles(item.files)}</div>
       </div>
     `).join('')}
   `;
 }
 
-function parseCurriculum(text, title, sourceName){
-  const lines = text.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
-  const phases = [];
-  let currentPhase = null;
-  let currentTopic = null;
-  const resources = [];
-  const curriculumTitle = title || lines[0] || 'Imported Curriculum';
-  lines.slice(title ? 0 : 1).forEach(raw=>{
-    const line = raw.replace(/^[-*]\s*/,'').trim();
-    if(/^(phase|module|section|part)\b/i.test(line)){
-      currentPhase = { id:uid(), name:cleanHeading(line), projects:[], topics:[] };
-      phases.push(currentPhase); currentTopic = null; return;
-    }
-    if(/^(project|assignment|exercise)\b/i.test(line)){
-      if(!currentPhase){ currentPhase = { id:uid(), name:'General', projects:[], topics:[] }; phases.push(currentPhase); }
-      currentTopic = blankTopic(cleanHeading(line)); currentPhase.topics.push(currentTopic); return;
-    }
-    if(/^(topic|concept|chapter|lesson)\b/i.test(line)){
-      if(!currentPhase){ currentPhase = { id:uid(), name:'General', projects:[], topics:[] }; phases.push(currentPhase); }
-      currentTopic = blankTopic(cleanHeading(line)); currentPhase.topics.push(currentTopic); return;
-    }
-    if(/^(objective|learning objective)s?:/i.test(line)){ ensureLocalTopic().objectives.push(cleanValue(line)); return; }
-    if(/^(deliverable|deliverables):/i.test(line)){ ensureLocalTopic().deliverables.push(cleanValue(line)); return; }
-    if(/^(success criteria|criteria|completion criteria):/i.test(line)){ ensureLocalTopic().successCriteria.push(cleanValue(line)); return; }
-    if(/^(keyword|keywords):/i.test(line)){ ensureLocalTopic().keywords.push(...cleanValue(line).split(/[,;|]/).map(s=>s.trim()).filter(Boolean)); return; }
-    if(/^(resource|resources|official resource):/i.test(line) || /^https?:\/\//i.test(line)){
-      const resource = { id:uid(), title:cleanValue(line)||line, url:(line.match(/https?:\/\/\S+/)||[''])[0], type:'static' };
-      resources.push(resource); if(currentTopic) currentTopic.resources.static.push(resource); return;
-    }
-    if(!currentPhase){ currentPhase = { id:uid(), name:'General', projects:[], topics:[] }; phases.push(currentPhase); }
-    currentTopic = blankTopic(line); currentPhase.topics.push(currentTopic);
-  });
-  function ensureLocalTopic(){
-    if(currentTopic) return currentTopic;
-    if(!currentPhase){ currentPhase = { id:uid(), name:'General', projects:[], topics:[] }; phases.push(currentPhase); }
-    currentTopic = blankTopic('General Topic'); currentPhase.topics.push(currentTopic); return currentTopic;
-  }
-  return { id:uid(), title:curriculumTitle, source:{name:sourceName||'Imported curriculum',type:'text',importedAt:now()}, phases, glossary:[], resources, versionHistory:[] };
-}
-
-function importCurriculum(){
+async function importCurriculum(){
   const text = document.getElementById('curriculumText').value.trim();
-  if(!text){ showToast('Curriculum text is required.'); return; }
+  if(!text && !uploadedCurriculumFile){ showToast('Curriculum text or PDF is required.'); return; }
   const title = document.getElementById('curriculumTitle').value.trim();
-  const curriculum = parseCurriculum(text, title, 'Dashboard import');
-  if(state.curriculum){
-    curriculum.versionHistory = [...(state.curriculum.versionHistory||[]), state.curriculum.source].filter(Boolean);
+  try{
+    const response = await apiRequest('/api/curriculum/import', {
+      method:'POST',
+      body:JSON.stringify({
+        title,
+        text,
+        fileName: uploadedCurriculumFile && uploadedCurriculumFile.name,
+        mimeType: uploadedCurriculumFile && uploadedCurriculumFile.type,
+        fileData: uploadedCurriculumFile && uploadedCurriculumFile.dataUrl,
+        sourceName: uploadedCurriculumFile ? uploadedCurriculumFile.name : 'Dashboard import',
+        sourceType: uploadedCurriculumFile ? uploadedCurriculumFile.type : 'text',
+        confirmUpdate:true
+      })
+    });
+    const payload = await response.json();
+    if(!response.ok) throw new Error(payload.error || 'AI curriculum import failed.');
+    state = migrate(payload.workflow);
+  }catch(error){
+    showToast(error.message);
+    return;
   }
-  state.curriculum = curriculum;
-  state.title = curriculum.title;
-  state.subtitle = 'AI curriculum roadmap with evidence-based progress tracking.';
-  state.phases = curriculum.phases.map(p=>({id:p.id,name:p.name,topics:phaseTopics(p),documents:[]}));
   selectedTopicId = allTopics()[0]?.id || null;
-  state.progress = calculateProgress(state);
   document.getElementById('importer').classList.remove('open');
-  persist();
   render();
-}
-
-function dynamicResources(topic){
-  const query = encodeURIComponent([topic.name,...(topic.keywords||[])].join(' '));
-  return [
-    { title:`${topic.name} official documentation`, url:`https://www.google.com/search?q=${query}+official+documentation`, type:'official-search' },
-    { title:`${topic.name} GitHub examples`, url:`https://github.com/search?q=${query}`, type:'github' },
-    { title:`${topic.name} Stack Overflow`, url:`https://stackoverflow.com/search?q=${query}`, type:'stackoverflow' }
-  ];
-}
-
-function localMentor(topic, question){
-  const missing = criteriaFor(topic).filter(c=>!(topic.audit?.evidence||[]).some(e=>e.met && e.criterion===c));
-  return [
-    `${topic.name}: ${topic.description || 'No curriculum description was extracted.'}`,
-    topic.objectives.length ? `Objectives: ${topic.objectives.join('; ')}` : 'Objectives: none stored yet.',
-    missing.length ? `Missing or unverified: ${missing.join('; ')}` : 'No missing stored criteria are visible.',
-    `Question focus: ${question}`
-  ].join('\n\n');
-}
-
-function applyLocalAudit(topic, repositoryUrl){
-  const criteria = criteriaFor(topic);
-  const repoText = repositoryUrl.toLowerCase();
-  const evidence = criteria.map(c=>{
-    const tokens = c.toLowerCase().split(/[^a-z0-9_]+/).filter(t=>t.length>2);
-    const met = tokens.some(t=>repoText.includes(t));
-    return { criterion:c, met, detail:met?'Matched repository URL text in local fallback.':'No local evidence found. Server audit required for repository inspection.' };
-  });
-  const completion = criteria.length ? Math.round(evidence.filter(e=>e.met).length / criteria.length * 100) : 0;
-  topic.status = completion === 100 ? 'complete' : completion > 0 ? 'partial' : 'missing';
-  topic.completion = completion;
-  topic.audit = { id:uid(), repository:repositoryUrl, status:topic.status, completion, confidence:35, evidence, recommendedNextSteps:evidence.filter(e=>!e.met).map(e=>`Address: ${e.criterion}`), createdAt:now() };
-  topic.audits.push(topic.audit);
 }
 
 function criteriaFor(topic){ return [...(topic.successCriteria||[]), ...(topic.deliverables||[]), ...(topic.objectives||[])].filter(Boolean).length ? [...(topic.successCriteria||[]), ...(topic.deliverables||[]), ...(topic.objectives||[])].filter(Boolean) : [topic.name]; }
 function list(items){ return items && items.length ? `<ul>${items.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p>None stored.</p>'; }
 function labelStatus(status){ return ({complete:'Complete',partial:'Partial',not_verified:'Not Verified',missing:'Missing'})[status] || status; }
-function cleanHeading(line){ return line.replace(/^(phase|module|part|section|project|assignment|exercise|topic|concept|chapter|lesson)\s*[:\d.-]*/i,'').trim() || line; }
-function cleanValue(line){ return line.replace(/^[^:]+:\s*/,'').trim(); }
+function auditFiles(files){ return files && files.length ? `<p class="small">${files.map(file=>`${escapeHtml(file.path)}: ${escapeHtml(file.snippet)}`).join('<br>')}</p>` : ''; }
 function escapeHtml(value){ const div=document.createElement('div'); div.textContent=value == null ? '' : String(value); return div.innerHTML; }
 function escapeAttr(value){ return escapeHtml(value).replace(/"/g,'&quot;'); }
 function showToast(message){ const toast=document.getElementById('toast'); toast.textContent=message; toast.style.display='block'; setTimeout(()=>toast.style.display='none',3600); }
@@ -748,9 +695,12 @@ document.getElementById('curriculumFile').addEventListener('change',event=>{
   const reader = new FileReader();
   reader.onload = () => {
     if(!document.getElementById('curriculumTitle').value) document.getElementById('curriculumTitle').value = file.name.replace(/\.[^.]+$/,'');
-    document.getElementById('curriculumText').value = String(reader.result || '');
+    uploadedCurriculumFile = { name:file.name, type:file.type || 'application/octet-stream', dataUrl:String(reader.result || '') };
+    if(!/pdf$/i.test(file.name)){
+      document.getElementById('curriculumText').value = atob(uploadedCurriculumFile.dataUrl.split(',')[1] || '');
+    }
   };
-  reader.readAsText(file);
+  reader.readAsDataURL(file);
 });
 
 loadState();
