@@ -228,6 +228,7 @@ header{
 }
 .project-option:hover{background:var(--panel-3)}
 .project-option.active{color:var(--orange)}
+.project-option.danger-option{color:var(--red)}
 .roadmap-shell{margin-top:0}
 .phase-rail{
   display:flex;
@@ -839,9 +840,11 @@ const ProjectSelector = {
       <div class="small" style="padding:6px 10px">Projects</div>
       ${state.projects.map(project=>`<button class="project-option ${project.id===state.activeProjectId?'active':''}" data-project-id="${project.id}">${project.id===state.activeProjectId?'✓ ':''}${escapeHtml(project.title)}</button>`).join('')}
       <button class="project-option" data-action="create-project">- Create Project</button>
+      <button class="project-option danger-option" data-action="delete-project">Delete Current Project</button>
     `;
     menu.querySelectorAll('[data-project-id]').forEach(btn=>btn.addEventListener('click',()=>this.switch(btn.dataset.projectId)));
     menu.querySelector('[data-action="create-project"]').addEventListener('click',()=>this.create());
+    menu.querySelector('[data-action="delete-project"]').addEventListener('click',()=>this.removeCurrent());
   },
   toggle(){ document.getElementById('projectMenu').classList.toggle('open'); },
   switch(projectId){
@@ -868,6 +871,21 @@ const ProjectSelector = {
     applyActiveProject();
     selectedTopicId = null;
     selectedPhaseId = null;
+    document.getElementById('projectMenu').classList.remove('open');
+    persist();
+    render();
+  },
+  removeCurrent(){
+    const project = activeProject();
+    if(!project) return;
+    if(state.projects.length <= 1){ showToast('You need at least one project.'); return; }
+    if(!confirm(`Delete project "${project.title}"?\n\nThis removes the project from the dashboard but does not change any other projects.`)) return;
+    state.projects = state.projects.filter(item=>item.id!==project.id);
+    state.activeProjectId = state.projects[0].id;
+    applyActiveProject();
+    selectedTeamMemberId = null;
+    selectedTopicId = allTopics()[0]?.id || null;
+    selectedPhaseId = selectedTopicId ? phaseForTopic(selectedTopicId)?.id : (state.curriculum?.phases||[])[0]?.id || null;
     document.getElementById('projectMenu').classList.remove('open');
     persist();
     render();
@@ -1164,6 +1182,7 @@ function renderTopicPanel(){
         <span class="topic-score">${topicCompletion(topic)}%</span>
       </button>
       <div class="topic-actions">
+        <button class="icon-btn" data-action="topic-complete" title="${topic.manualOverride?.completed ? 'Mark not complete' : 'Mark completed'}">${topic.manualOverride?.completed ? '✓' : '○'}</button>
         <button class="assignment-trigger" data-action="topic-assign" title="Assign topic" aria-label="Assign topic">${assignmentDots(topic)}</button>
         <button class="icon-btn" data-action="topic-up" title="Move topic up">↑</button>
         <button class="icon-btn" data-action="topic-down" title="Move topic down">↓</button>
@@ -1172,6 +1191,7 @@ function renderTopicPanel(){
       </div>
     `;
     row.querySelector('.topic-select').addEventListener('click',()=>{ selectedTopicId=topic.id; render(); });
+    row.querySelector('[data-action="topic-complete"]').addEventListener('click',()=>toggleTopicCompleted(topic));
     row.querySelector('[data-action="topic-assign"]').addEventListener('click',event=>openAssignmentMenu('topic', topic, event.currentTarget));
     row.querySelector('[data-action="topic-up"]').addEventListener('click',()=>TopicService.move(topic,'up'));
     row.querySelector('[data-action="topic-down"]').addEventListener('click',()=>TopicService.move(topic,'down'));
@@ -1209,7 +1229,13 @@ function renderWorkspace(){
         <div class="card"><h3>Learning Objectives</h3>${list(topic.objectives)}</div>
         <div class="card"><h3>Completion Checklist</h3>${list(criteriaFor(topic))}</div>
         <div class="card"><h3>Deliverables</h3>${list(topic.deliverables)}</div>
-        <div class="card"><h3>Progress</h3><p>${topicCompletion(topic)}%</p><p>${topic.manualOverride?.completed ? 'Manually completed' : 'Tracked from topic status'}</p></div>
+        <div class="card">
+          <h3>Progress</h3>
+          <p>${topicCompletion(topic)}%</p>
+          <p>${topic.manualOverride?.completed ? 'Manually completed' : 'Tracked from topic status'}</p>
+          <div style="height:10px"></div>
+          <button class="btn ${topic.manualOverride?.completed ? 'danger' : 'primary'}" id="topicCompleteBtn">${topic.manualOverride?.completed ? 'Mark Not Complete' : 'Mark Completed'}</button>
+        </div>
       </div>
       <div class="card">
         <h3>Notes</h3>
@@ -1221,8 +1247,19 @@ function renderWorkspace(){
       </div>
     </div>
   `;
+  document.getElementById('topicCompleteBtn').addEventListener('click',()=>toggleTopicCompleted(topic));
   renderNotes(document.getElementById('notesPanel'), topic);
   renderChat(document.getElementById('chatPanel'), topic);
+}
+
+function toggleTopicCompleted(topic){
+  const completed = !(topic.manualOverride?.completed);
+  topic.manualOverride = completed ? { completed:true, reason:'Manually marked complete from dashboard.', updatedAt:now() } : null;
+  topic.completion = completed ? 100 : undefined;
+  state.progress = calculateProgress(state);
+  captureActiveProject();
+  persist();
+  render();
 }
 
 function renderResourcesPanel(){
