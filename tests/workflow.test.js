@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { addPhase, addTopic, deletePhase, deleteTopic, movePhase, moveTopic, updatePhase, updateTopic, validateState } from '../lib/workflow.js';
-import { calculateProgress, setManualOverride } from '../lib/curriculum.js';
+import { calculateProgress, ensureCurriculumState, setManualOverride } from '../lib/curriculum.js';
 
 function state() { return { title: 'Plan', subtitle: '', phases: [] }; }
 
@@ -82,4 +82,36 @@ test('manages topics with validation, deletion, and order', () => {
   deleteTopic(workflow, socket.id);
   assert.equal(workflow.curriculum.phases[0].topics.length, 1);
   assert.equal(workflow.phases[0].topics.length, 1);
+});
+
+test('preserves explicit topic activities during curriculum normalisation', () => {
+  const workflow = {
+    title: 'Cube3D',
+    subtitle: '',
+    phases: [{
+      id: 'phase-1',
+      name: 'Scope',
+      topics: [{
+        id: 'topic-1',
+        name: 'Requirements',
+        status: 'not_verified',
+        activities: [{
+          title: 'Review required features',
+          status: 'not_started',
+          completionRequirements: ['Mandatory requirements are documented.']
+        }],
+        successCriteria: ['Review required features']
+      }]
+    }]
+  };
+
+  ensureCurriculumState(workflow);
+  validateState(workflow);
+
+  assert.deepEqual(workflow.curriculum.phases[0].topics[0].activities, [{
+    title: 'Review required features',
+    status: 'not_started',
+    completionRequirements: ['Mandatory requirements are documented.']
+  }]);
+  assert.equal(workflow.curriculum.phases[0].topics[0].successCriteria[0], 'Review required features');
 });
