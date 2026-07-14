@@ -18,6 +18,7 @@ const MAX_IMPORT_FILE_DATA_CHARS = 4 * 1024 * 1024;
 const PDF_DATA_URL_PATTERN = /^data:application\/pdf(?:;[^,]*)?;base64,/i;
 
 export const config = {
+  maxDuration: 60,
   api: {
     bodyParser: {
       sizeLimit: '20mb'
@@ -36,6 +37,20 @@ function requestId() {
 
 function sendError(res, status, error, id) {
   return send(res, status, { success: false, error, requestId: id });
+}
+
+export function statusForApiError(error) {
+  const message = String((error && error.message) || '');
+  if (/too large/i.test(message)) return 413;
+  if (/OPENAI_API_KEY|OpenAI request failed|OpenAI returned invalid JSON|OpenAI response/i.test(message)) return 500;
+  if (/not found|required|must|contain|repository|malformed|uploaded|valid application\/pdf|only pdf/i.test(message)) return 400;
+  return 500;
+}
+
+export function messageForApiError(error, path) {
+  const message = String((error && error.message) || 'Failed to build roadmap');
+  if (/OPENAI_API_KEY/i.test(message)) return `Server route ${path} failed: ${message}`;
+  return message;
 }
 
 function supabaseHeaders() {
@@ -274,16 +289,15 @@ export default async function handler(req, res) {
     console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 404, errorMessage: 'Endpoint not found.' });
     return sendError(res, 404, 'Endpoint not found.', id);
   } catch (error) {
-    const status = /too large/i.test(error.message)
-      ? 413
-      : (/not found|required|must|contain|repository|malformed|uploaded|valid application\/pdf|only pdf/i.test(error.message) ? 400 : 500);
+    const status = statusForApiError(error);
+    const errorMessage = messageForApiError(error, path);
     console.error('API request failed', {
       ...routeLogBase(req, path, id, startedAt),
       status,
       errorName: error && error.name,
-      errorMessage: error && error.message,
+      errorMessage,
       stack: error && error.stack
     });
-    return sendError(res, status, error.message || 'Failed to build roadmap', id);
+    return sendError(res, status, errorMessage, id);
   }
 }

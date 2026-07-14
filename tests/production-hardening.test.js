@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateImportPayload } from '../api/index.js';
+import { readFileSync } from 'node:fs';
+import { validateImportPayload, messageForApiError, statusForApiError } from '../api/index.js';
 import { mentorWithAI, parseCurriculumWithAI } from '../lib/ai.js';
 import { collectRepositoryContext, validateCurriculumRoadmap } from '../lib/curriculum.js';
 import { readApiJson } from '../public/client-response.js';
@@ -8,6 +9,37 @@ import { readApiJson } from '../public/client-response.js';
 function response(body, { status = 200, headers = {} } = {}) {
   return new Response(status === 204 || status === 304 ? null : body, { status, headers });
 }
+
+test('OpenAI usage stays server-side and uses the shared AI module', () => {
+  const frontend = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const api = readFileSync(new URL('../api/index.js', import.meta.url), 'utf8');
+  const ai = readFileSync(new URL('../lib/ai.js', import.meta.url), 'utf8');
+  const curriculum = readFileSync(new URL('../lib/curriculum.js', import.meta.url), 'utf8');
+  const forbiddenPublicKeys = [
+    'VITE_OPENAI_API_KEY',
+    'NEXT_PUBLIC_OPENAI_API_KEY',
+    'sk-'
+  ];
+
+  for (const forbidden of forbiddenPublicKeys) {
+    assert.equal(frontend.includes(forbidden), false, `frontend must not contain ${forbidden}`);
+  }
+  assert.equal(frontend.includes('api.openai.com'), false);
+  assert.match(ai, /process\.env\.OPENAI_API_KEY/);
+  assert.match(ai, /Authorization:\s*`Bearer \$\{process\.env\.OPENAI_API_KEY\}`/);
+  assert.match(curriculum, /mentorWithAI/);
+  assert.match(curriculum, /auditRoadmapWithAI/);
+  assert.equal(api.includes('process.env.OPENAI_API_KEY'), false);
+});
+
+test('missing OpenAI config is reported as a server route failure', () => {
+  const error = new Error('OPENAI_API_KEY is required for AI-assisted functionality.');
+  assert.equal(statusForApiError(error), 500);
+  assert.equal(
+    messageForApiError(error, '/repository/audit'),
+    'Server route /repository/audit failed: OPENAI_API_KEY is required for AI-assisted functionality.'
+  );
+});
 
 test('frontend helper reads a successful JSON response', async () => {
   const data = await readApiJson(response(JSON.stringify({ ok: true })), 'Action failed');

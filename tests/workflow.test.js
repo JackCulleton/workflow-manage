@@ -22,6 +22,8 @@ test('rejects an invalid topic status', () => {
 });
 
 test('curriculum building requires the configured AI provider', async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
   await assert.rejects(() => createCurriculumFromText({
     title: 'Minishell',
     text: `
@@ -34,6 +36,7 @@ Keywords: parser, token
 Resource: https://example.com/minishell
 `
   }), /OPENAI_API_KEY/);
+  if (previousKey) process.env.OPENAI_API_KEY = previousKey;
 });
 
 test('calculates completion from topic evidence and manual overrides', () => {
