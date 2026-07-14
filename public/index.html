@@ -712,6 +712,7 @@ function ensureProjects(next){
 }
 
 function activeProject(){ return state.projects.find(project=>project.id===state.activeProjectId) || state.projects[0]; }
+function activeProjectId(){ return state.activeProjectId || activeProject()?.id; }
 function captureActiveProject(){
   const project = activeProject();
   if(!project) return;
@@ -1017,7 +1018,7 @@ const PhaseService = {
     try{
       const clean = this.validateName(name);
       const description = prompt('Description (optional):') || '';
-      const response = await apiRequest('/api/phases', { method:'POST', body:JSON.stringify({name:clean, description}) });
+      const response = await apiRequest('/api/phases', { method:'POST', body:JSON.stringify({projectId:activeProjectId(), name:clean, description}) });
       await ProjectStructureManager.apply(response, 'Add phase failed');
     }catch(error){ showToast(error.message); }
   },
@@ -1026,20 +1027,20 @@ const PhaseService = {
     if(name === null) return;
     try{
       const clean = this.validateName(name, phase.id);
-      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'PATCH', body:JSON.stringify({name:clean}) });
+      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'PATCH', body:JSON.stringify({projectId:activeProjectId(), name:clean}) });
       await ProjectStructureManager.apply(response, 'Rename phase failed');
     }catch(error){ showToast(error.message); }
   },
   async remove(phase){
     if(!confirm(`Delete phase "${phase.name}"?\n\nThis will also delete every topic inside this phase.`)) return;
     try{
-      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'DELETE' });
+      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'DELETE', body:JSON.stringify({projectId:activeProjectId()}) });
       await ProjectStructureManager.apply(response, 'Delete phase failed');
     }catch(error){ showToast(error.message); }
   },
   async move(phase, direction){
     try{
-      const response = await apiRequest(`/api/phases/${phase.id}/move`, { method:'POST', body:JSON.stringify({direction}) });
+      const response = await apiRequest(`/api/phases/${phase.id}/move`, { method:'POST', body:JSON.stringify({projectId:activeProjectId(), direction}) });
       await ProjectStructureManager.apply(response, 'Move phase failed');
     }catch(error){ showToast(error.message); }
   }
@@ -1058,7 +1059,7 @@ const TopicService = {
     try{
       const clean = this.validateName(phase, name);
       const description = prompt('Description (optional):') || '';
-      const response = await apiRequest('/api/topics', { method:'POST', body:JSON.stringify({phase_id:phase.id, name:clean, description}) });
+      const response = await apiRequest('/api/topics', { method:'POST', body:JSON.stringify({projectId:activeProjectId(), phase_id:phase.id, name:clean, description}) });
       const payload = await ProjectStructureManager.apply(response, 'Add topic failed');
       selectedTopicId = payload.topic?.id || selectedTopicId;
       render();
@@ -1069,20 +1070,20 @@ const TopicService = {
     if(name === null) return;
     try{
       const clean = this.validateName(phase, name, topic.id);
-      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'PATCH', body:JSON.stringify({name:clean}) });
+      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'PATCH', body:JSON.stringify({projectId:activeProjectId(), name:clean}) });
       await ProjectStructureManager.apply(response, 'Rename topic failed');
     }catch(error){ showToast(error.message); }
   },
   async remove(topic){
     if(!confirm(`Delete topic "${topic.name}"?`)) return;
     try{
-      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'DELETE' });
+      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'DELETE', body:JSON.stringify({projectId:activeProjectId()}) });
       await ProjectStructureManager.apply(response, 'Delete topic failed');
     }catch(error){ showToast(error.message); }
   },
   async move(topic, direction){
     try{
-      const response = await apiRequest(`/api/topics/${topic.id}/move`, { method:'POST', body:JSON.stringify({direction}) });
+      const response = await apiRequest(`/api/topics/${topic.id}/move`, { method:'POST', body:JSON.stringify({projectId:activeProjectId(), direction}) });
       await ProjectStructureManager.apply(response, 'Move topic failed');
     }catch(error){ showToast(error.message); }
   }
@@ -1343,7 +1344,7 @@ function renderChat(body, topic){
     const question = document.getElementById('chatQuestion').value.trim();
     if(!question) return;
     try{
-      const response = await apiRequest(`/api/topics/${topic.id}/mentor`, { method:'POST', body:JSON.stringify({question}) });
+      const response = await apiRequest(`/api/topics/${topic.id}/mentor`, { method:'POST', body:JSON.stringify({projectId:activeProjectId(), question}) });
       const payload = await readApiJson(response, 'Mentor request failed');
       Object.assign(topic, payload.topic);
       localStorage.setItem(STATE_KEY, JSON.stringify(state));

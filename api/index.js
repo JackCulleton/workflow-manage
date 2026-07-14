@@ -36,7 +36,8 @@ export function statusForApiError(error) {
   const message = String((error && error.message) || '');
   if (/too large/i.test(message)) return 413;
   if (/OPENAI_API_KEY|OpenAI request failed|OpenAI returned invalid JSON|OpenAI response/i.test(message)) return 500;
-  if (/not found|required|must|contain|already exists|direction/i.test(message)) return 400;
+  if (/not found/i.test(message)) return 404;
+  if (/required|must|contain|already exists|direction/i.test(message)) return 400;
   return 500;
 }
 
@@ -91,6 +92,34 @@ async function writeState(state) {
     body: JSON.stringify({ id: WORKFLOW_ID, data: state, updated_at: new Date().toISOString() })
   });
   if (!response.ok) throw await storageError('write', response);
+}
+
+function normaliseProject(project) {
+  if (!project || typeof project !== 'object') return project;
+  ensureCurriculumState(project);
+  project.phases = project.phases || (project.curriculum && project.curriculum.phases) || [];
+  project.progress = calculateProgress(project);
+  return project;
+}
+
+export function requireTargetProject(state, input = {}) {
+  const projectId = input && input.projectId;
+  if (!projectId) throw new Error('projectId is required.');
+  const project = Array.isArray(state.projects) ? state.projects.find((item) => item.id === projectId) : null;
+  if (!project) throw new Error('Project not found');
+  return normaliseProject(project);
+}
+
+function syncTargetProject(state, project) {
+  normaliseProject(project);
+  if (state.activeProjectId === project.id) {
+    state.title = project.title;
+    state.subtitle = project.subtitle || state.subtitle || '';
+    state.teamMembers = project.teamMembers || [];
+    state.curriculum = project.curriculum;
+    state.phases = project.phases;
+    state.progress = project.progress;
+  }
 }
 
 export default async function handler(req, res) {
@@ -155,74 +184,94 @@ export default async function handler(req, res) {
         console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 400, errorMessage: 'Phase name is required.' });
         return sendError(res, 400, 'Phase name is required.', id);
       }
-      const phase = addPhase(state, req.body);
+      const project = requireTargetProject(state, req.body);
+      const phase = addPhase(project, req.body);
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
-      return send(res, 201, { phase, workflow: state });
+      return send(res, 201, { success: true, projectId: project.id, phase, workflow: state });
     }
     const phaseMatch = path.match(/^\/phases\/([^/]+)$/);
     if (phaseMatch && req.method === 'PATCH') {
-      const phase = updatePhase(state, phaseMatch[1], req.body || {});
+      const project = requireTargetProject(state, req.body || {});
+      const phase = updatePhase(project, phaseMatch[1], req.body || {});
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { phase, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, phase, workflow: state });
     }
     if (phaseMatch && req.method === 'DELETE') {
-      deletePhase(state, phaseMatch[1]);
+      const project = requireTargetProject(state, req.body || {});
+      deletePhase(project, phaseMatch[1]);
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, workflow: state });
     }
     const phaseMoveMatch = path.match(/^\/phases\/([^/]+)\/move$/);
     if (phaseMoveMatch && req.method === 'POST') {
-      movePhase(state, phaseMoveMatch[1], (req.body && req.body.direction) || '');
+      const project = requireTargetProject(state, req.body || {});
+      movePhase(project, phaseMoveMatch[1], (req.body && req.body.direction) || '');
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, workflow: state });
     }
     if (req.method === 'POST' && path === '/topics') {
       if (!req.body || !req.body.phase_id || !req.body.name || !req.body.name.trim()) {
         console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 400, errorMessage: 'phase_id and name are required.' });
         return sendError(res, 400, 'phase_id and name are required.', id);
       }
-      const topic = addTopic(state, req.body);
+      const project = requireTargetProject(state, req.body);
+      const topic = addTopic(project, req.body);
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
-      return send(res, 201, { topic, workflow: state });
+      return send(res, 201, { success: true, projectId: project.id, topic, workflow: state });
     }
     const match = path.match(/^\/topics\/([^/]+)$/);
     if (req.method === 'PATCH' && match) {
-      const topic = updateTopic(state, match[1], req.body || {});
+      const project = requireTargetProject(state, req.body || {});
+      const topic = updateTopic(project, match[1], req.body || {});
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { topic, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topic, workflow: state });
     }
     if (req.method === 'DELETE' && match) {
-      deleteTopic(state, match[1]);
+      const project = requireTargetProject(state, req.body || {});
+      deleteTopic(project, match[1]);
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, workflow: state });
     }
     const topicMoveMatch = path.match(/^\/topics\/([^/]+)\/move$/);
     if (req.method === 'POST' && topicMoveMatch) {
-      moveTopic(state, topicMoveMatch[1], (req.body && req.body.direction) || '');
+      const project = requireTargetProject(state, req.body || {});
+      moveTopic(project, topicMoveMatch[1], (req.body && req.body.direction) || '');
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, workflow: state });
     }
     const notesMatch = path.match(/^\/topics\/([^/]+)\/notes$/);
     if (req.method === 'PATCH' && notesMatch) {
-      const topic = updateTopicNotes(state, notesMatch[1], (req.body && req.body.notes) || '');
+      const project = requireTargetProject(state, req.body || {});
+      const topic = updateTopicNotes(project, notesMatch[1], (req.body && req.body.notes) || '');
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { topic, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topic, workflow: state });
     }
     const manualMatch = path.match(/^\/topics\/([^/]+)\/manual-override$/);
     if (req.method === 'PATCH' && manualMatch) {
-      const topic = setManualOverride(state, manualMatch[1], req.body || {});
+      const project = requireTargetProject(state, req.body || {});
+      const topic = setManualOverride(project, manualMatch[1], req.body || {});
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { topic, progress: state.progress, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topic, progress: project.progress, workflow: state });
     }
     const resourcesMatch = path.match(/^\/topics\/([^/]+)\/resources$/);
     if (req.method === 'GET' && resourcesMatch) {
@@ -239,10 +288,12 @@ export default async function handler(req, res) {
     }
     const mentorMatch = path.match(/^\/topics\/([^/]+)\/mentor$/);
     if (req.method === 'POST' && mentorMatch) {
-      const result = await mentorReply(state, mentorMatch[1], (req.body && req.body.question) || '');
+      const project = requireTargetProject(state, req.body || {});
+      const result = await mentorReply(project, mentorMatch[1], (req.body && req.body.question) || '');
+      syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, result);
+      return send(res, 200, { success: true, projectId: project.id, ...result });
     }
     console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 404, errorMessage: 'Endpoint not found.' });
     return sendError(res, 404, 'Endpoint not found.', id);
