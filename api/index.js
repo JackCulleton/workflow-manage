@@ -113,6 +113,23 @@ function getPhaseTopicList(phase) {
   return [...(phase.topics || []), ...(phase.projects || []).flatMap((project) => project.topics || [])];
 }
 
+function stripNestedProjectsFromPhases(phases = []) {
+  let changed = false;
+  for (const phase of phases) {
+    if (!phase || typeof phase !== 'object') continue;
+    const nestedTopics = (phase.projects || []).flatMap((project) => project.topics || []);
+    if (nestedTopics.length) {
+      phase.topics = [...(phase.topics || []), ...nestedTopics];
+      changed = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(phase, 'projects')) {
+      delete phase.projects;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function projectName(project) {
   return project && (project.name || project.title || (project.curriculum && project.curriculum.title) || 'Workflow');
 }
@@ -120,6 +137,7 @@ function projectName(project) {
 function projectToWorkflow(project) {
   normaliseProject(project);
   const phases = (project.curriculum && project.curriculum.phases) || project.phases || [];
+  stripNestedProjectsFromPhases(phases);
   const name = projectName(project);
   return {
     title: name,
@@ -152,11 +170,12 @@ export function migrateToSingleProject(input) {
   if (!state) return { state: null, changed: false };
   if (state.project && !Array.isArray(state.projects)) {
     ensureCurriculumState(state);
+    const changed = stripNestedProjectsFromPhases(state.curriculum.phases);
     state.project.phases = state.curriculum.phases;
     state.project.teamMembers = state.teamMembers || state.project.teamMembers || [];
     state.project.name = state.project.name || state.title || state.curriculum.title || 'Workflow';
     state.progress = calculateProgress(state);
-    return { state, changed: false };
+    return { state, changed };
   }
   const projects = Array.isArray(state.projects) ? state.projects : [];
   let selected = projects.find((project) => project.id === state.activeProjectId);
@@ -186,6 +205,7 @@ export function migrateToSingleProject(input) {
     }] : [])
   ];
   ensureCurriculumState(next);
+  stripNestedProjectsFromPhases(next.curriculum.phases);
   next.project.phases = next.curriculum.phases;
   next.progress = calculateProgress(next);
   return { state: next, changed: true };
@@ -206,6 +226,7 @@ function normaliseProject(project) {
   if (!project || typeof project !== 'object') return project;
   ensureCurriculumState(project);
   project.phases = project.phases || (project.curriculum && project.curriculum.phases) || [];
+  stripNestedProjectsFromPhases(project.curriculum?.phases || project.phases);
   project.progress = calculateProgress(project);
   return project;
 }

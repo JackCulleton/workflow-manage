@@ -110,6 +110,7 @@ test('legacy multi-project state migrates to one stable minishell project with b
   assert.equal(result.state.project.id, '4u4nqhe5');
   assert.equal(result.state.project.name, 'minishell');
   assert.equal(result.state.curriculum.phases.length, 2);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.state.curriculum.phases[0], 'projects'), false);
   assert.equal(result.state.teamMembers[0].name, 'Ada');
   assert.equal(Array.isArray(result.state.projects), false);
   assert.equal(result.state.activeProjectId, undefined);
@@ -129,6 +130,7 @@ test('repeated getWorkflow calls return the same single project data', async () 
   assert.equal(third.body.project.id, '4u4nqhe5');
   assert.equal(first.body.workflow.curriculum.phases.length, third.body.workflow.curriculum.phases.length);
   assert.equal(Array.isArray(third.body.workflow.projects), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(third.body.workflow.curriculum.phases[0], 'projects'), false);
   assert.equal(third.body.workflow.activeProjectId, undefined);
   assert.equal(stateRef.current.project.id, '4u4nqhe5');
   assert.equal(stateRef.current.migrationBackups.length, 1);

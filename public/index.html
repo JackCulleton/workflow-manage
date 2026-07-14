@@ -657,7 +657,9 @@ function migrate(input){
   }
   next.curriculum.phases.forEach(p=>{
     if(!Array.isArray(p.assignedMemberIds)) p.assignedMemberIds = [];
-    p.topics = (p.topics||[]).map(enrichTopic);
+    const nestedTopics = (p.projects||[]).flatMap(project=>project.topics||[]);
+    p.topics = [...(p.topics||[]), ...nestedTopics].map(enrichTopic);
+    delete p.projects;
   });
   next.project = next.project || { id:uid(), name:next.title || next.curriculum.title || 'Mountain Scope', description:next.subtitle || '', teamMembers:next.teamMembers || [], phases:next.curriculum.phases };
   next.project.name = next.project.name || next.title || next.curriculum.title || 'Mountain Scope';
