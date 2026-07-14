@@ -20,6 +20,7 @@ paths:
     put:
       operationId: replaceWorkflow
       summary: Replace the full workflow after a deliberate bulk edit.
+      description: Replaces the workflow only after project identities are validated. Project deletion requires allowProjectDeletion.
       requestBody:
         required: true
         content:
@@ -30,6 +31,8 @@ paths:
               properties:
                 workflow:
                   $ref: '#/components/schemas/Workflow'
+                allowProjectDeletion:
+                  type: boolean
       responses:
         '200': { description: Workflow saved }
   /curriculum:
@@ -151,14 +154,14 @@ paths:
     post:
       operationId: addTopic
       summary: Add a topic to an existing phase.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Adds a topic to the project identified by projectId, or to the project containing phase_id when that phase ID is globally unique. It never uses the active project implicitly.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [projectId, phase_id, name]
+              required: [phase_id, name]
               properties:
                 projectId: { type: string }
                 phase_id: { type: string }

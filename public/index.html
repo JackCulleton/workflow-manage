@@ -804,12 +804,12 @@ function calculateProgress(next){
   };
 }
 
-async function persist(){
+async function persist(options={}){
   state.progress = calculateProgress(state);
   captureActiveProject();
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
   try{
-    const response = await apiRequest(API_URL, { method:'PUT', body:JSON.stringify({workflow:state}) });
+    const response = await apiRequest(API_URL, { method:'PUT', body:JSON.stringify({workflow:state, allowProjectDeletion:Boolean(options.allowProjectDeletion)}) });
     await readApiJson(response, 'Online save failed');
   }catch(error){
     showToast(`${error.message} Local backup kept.`);
@@ -856,7 +856,7 @@ const ProjectSelector = {
     selectedTopicId = allTopics()[0]?.id || null;
     selectedPhaseId = selectedTopicId ? phaseForTopic(selectedTopicId)?.id : (state.curriculum?.phases||[])[0]?.id || null;
     document.getElementById('projectMenu').classList.remove('open');
-    persist();
+    persist({ allowProjectDeletion:true });
     render();
   },
   create(){

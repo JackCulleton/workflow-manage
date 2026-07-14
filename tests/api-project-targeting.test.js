@@ -188,17 +188,9 @@ test('addTopic targets the requested project phase and preserves other projects'
   );
 });
 
-test('addTopic rejects missing projectId, invalid projectId, and wrong phase ids', async () => {
+test('addTopic rejects invalid projectId and wrong phase ids', async () => {
   const stateRef = { current: workflowState() };
   const before = JSON.stringify(stateRef.current);
-
-  const missing = await callApi('POST', '/api/topics', {
-    phase_id: 'mini-phase',
-    name: 'Should Not Add'
-  }, stateRef);
-  assert.equal(missing.statusCode, 400);
-  assert.match(missing.body.error, /projectId is required/);
-  assert.equal(JSON.stringify(stateRef.current), before);
 
   const invalidProject = await callApi('POST', '/api/topics', {
     projectId: 'missing-project',
@@ -217,4 +209,80 @@ test('addTopic rejects missing projectId, invalid projectId, and wrong phase ids
   assert.equal(wrongPhase.statusCode, 404);
   assert.match(wrongPhase.body.error, /Phase not found/);
   assert.equal(JSON.stringify(stateRef.current), before);
+});
+
+test('repeated getWorkflow calls preserve project ids and data', async () => {
+  const stateRef = { current: workflowState() };
+  const first = await callApi('GET', '/api/workflow', null, stateRef);
+  const second = await callApi('GET', '/api/workflow', null, stateRef);
+  const third = await callApi('GET', '/api/workflow', null, stateRef);
+
+  assert.equal(projectById(first.body.workflow, '8cid8lk8').title, 'minishell');
+  assert.equal(projectById(second.body.workflow, '8cid8lk8').title, 'minishell');
+  assert.equal(projectById(third.body.workflow, '8cid8lk8').title, 'minishell');
+  assert.deepEqual(
+    first.body.workflow.projects.map((item) => item.id),
+    third.body.workflow.projects.map((item) => item.id)
+  );
+});
+
+test('replaceWorkflow rejects duplicate project names and id churn', async () => {
+  const stateRef = { current: workflowState() };
+  const duplicate = structuredClone(stateRef.current);
+  duplicate.projects.push(project('other-mini', 'minishell', []));
+  const duplicateResponse = await callApi('PUT', '/api/workflow', { workflow: duplicate }, stateRef);
+  assert.equal(duplicateResponse.statusCode, 400);
+  assert.match(duplicateResponse.body.error, /Duplicate project name/);
+
+  const churn = structuredClone(stateRef.current);
+  projectById(churn, '8cid8lk8').id = '4u4nqhe5';
+  churn.activeProjectId = churn.projects[0].id;
+  const churnResponse = await callApi('PUT', '/api/workflow', { workflow: churn }, stateRef);
+  assert.equal(churnResponse.statusCode, 400);
+  assert.match(churnResponse.body.error, /different id/);
+});
+
+test('replaceWorkflow rejects project removal unless deletion is explicit', async () => {
+  const stateRef = { current: workflowState() };
+  const before = JSON.stringify(stateRef.current);
+  const removed = structuredClone(stateRef.current);
+  removed.projects = removed.projects.filter((item) => item.id !== '8cid8lk8');
+
+  const rejected = await callApi('PUT', '/api/workflow', { workflow: removed }, stateRef);
+  assert.equal(rejected.statusCode, 400);
+  assert.match(rejected.body.error, /remove existing projects/);
+  assert.equal(JSON.stringify(stateRef.current), before);
+
+  const accepted = await callApi('PUT', '/api/workflow', { workflow: removed, allowProjectDeletion: true }, stateRef);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(projectById(stateRef.current, '8cid8lk8'), undefined);
+});
+
+test('addTopic may target a globally unique phase id without projectId', async () => {
+  const stateRef = { current: workflowState() };
+  const response = await callApi('POST', '/api/topics', {
+    phase_id: 'mini-phase',
+    name: 'Unique phase target'
+  }, stateRef);
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.body.projectId, '8cid8lk8');
+  assert.equal(projectById(stateRef.current, '8cid8lk8').curriculum.phases[0].topics.some((item) => item.name === 'Unique phase target'), true);
+  assert.equal(projectById(stateRef.current, 'cube-id').curriculum.phases[0].topics.some((item) => item.name === 'Unique phase target'), false);
+});
+
+test('addTopic rejects ambiguous phase ids without projectId', async () => {
+  const stateRef = { current: workflowState() };
+  projectById(stateRef.current, 'cube-id').curriculum.phases[0].id = 'shared-phase';
+  projectById(stateRef.current, 'cube-id').phases[0].id = 'shared-phase';
+  projectById(stateRef.current, '8cid8lk8').curriculum.phases[0].id = 'shared-phase';
+  projectById(stateRef.current, '8cid8lk8').phases[0].id = 'shared-phase';
+
+  const response = await callApi('POST', '/api/topics', {
+    phase_id: 'shared-phase',
+    name: 'Ambiguous target'
+  }, stateRef);
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.error, /ambiguous/);
 });
