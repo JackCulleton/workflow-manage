@@ -197,7 +197,21 @@ header{
   cursor:pointer;
 }
 .icon-btn:hover{border-color:var(--orange);color:var(--orange)}
-.phase-name{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phase-select{
+  border:none;
+  background:transparent;
+  color:var(--text);
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:10px;
+  align-items:start;
+  min-width:0;
+  width:100%;
+  text-align:left;
+  cursor:pointer;
+  padding:4px;
+}
+.phase-name{font-weight:800;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
 .phase-progress{font-size:12px;color:var(--orange);font-weight:800}
 .topic-panel,.resources-panel{display:none;position:sticky;top:18px}
 .topic-panel.open{display:block}
@@ -216,9 +230,9 @@ header{
   padding:8px;
   border-radius:10px;
   display:grid;
-  grid-template-columns:minmax(0,1fr) auto;
-  gap:9px;
-  align-items:center;
+  grid-template-columns:1fr;
+  gap:6px;
+  align-items:start;
   transition:background .14s ease,border-color .14s ease;
 }
 .topic:hover,.topic.active{background:var(--panel-3);border-color:rgba(255,255,255,.07)}
@@ -229,8 +243,9 @@ header{
   display:grid;
   grid-template-columns:10px minmax(0,1fr) auto;
   gap:9px;
-  align-items:center;
+  align-items:start;
   min-width:0;
+  width:100%;
   text-align:left;
   cursor:pointer;
   padding:4px;
@@ -240,7 +255,7 @@ header{
 .dot.partial{background:var(--yellow)}
 .dot.not_verified{background:var(--blue)}
 .dot.missing{background:var(--red)}
-.topic-name{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topic-name{font-size:13px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
 .topic-score{font-size:12px;color:var(--faint);font-weight:800}
 .workspace-head{
   display:flex;
@@ -787,7 +802,7 @@ function renderRoadmap(){
     wrap.className = `phase ${phase.id===currentPhase?.id?'active':''}`;
     wrap.innerHTML = `
       <div class="phase-head">
-        <button class="topic-select" data-action="select-phase"><span class="phase-name">${escapeHtml(phase.name)}</span><span class="phase-progress">${phaseProgress}%</span></button>
+        <button class="phase-select" data-action="select-phase"><span class="phase-name">${escapeHtml(phase.name)}</span><span class="phase-progress">${phaseProgress}%</span></button>
         <div class="phase-actions">
           <button class="icon-btn" data-action="phase-up" title="Move phase up">↑</button>
           <button class="icon-btn" data-action="phase-down" title="Move phase down">↓</button>
