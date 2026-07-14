@@ -109,6 +109,8 @@ test('addPhase targets the requested project and persists after reload', async (
   assert.equal(response.statusCode, 201);
   assert.equal(response.body.success, true);
   assert.equal(response.body.projectId, '8cid8lk8');
+  assert.equal(response.body.phaseId, response.body.phase.id);
+  assert.equal(response.body.persistence, 'stored');
   assert.equal(projectById(stateRef.current, '8cid8lk8').curriculum.phases.some((item) => item.name === 'Temporary API Target Test'), true);
   assert.equal(projectById(stateRef.current, 'cube-id').curriculum.phases.some((item) => item.name === 'Temporary API Target Test'), false);
   assert.equal(stateRef.current.curriculum.phases.some((item) => item.name === 'Temporary API Target Test'), false);
@@ -172,6 +174,9 @@ test('addTopic targets the requested project phase and preserves other projects'
   assert.equal(response.statusCode, 201);
   assert.equal(response.body.success, true);
   assert.equal(response.body.projectId, '8cid8lk8');
+  assert.equal(response.body.phaseId, 'mini-phase');
+  assert.equal(response.body.topicId, response.body.topic.id);
+  assert.equal(response.body.persistence, 'stored');
   assert.equal(
     projectById(stateRef.current, '8cid8lk8').curriculum.phases[0].topics.some((item) => item.name === 'Parse quoted strings'),
     true

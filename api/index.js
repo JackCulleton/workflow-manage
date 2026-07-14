@@ -270,7 +270,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
-      return send(res, 201, { success: true, projectId: project.id, phase, workflow: state });
+      return send(res, 201, { success: true, projectId: project.id, phaseId: phase.id, phase, persistence: 'stored', workflow: state });
     }
     const phaseMatch = path.match(/^\/phases\/([^/]+)$/);
     if (phaseMatch && req.method === 'PATCH') {
@@ -279,7 +279,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, phase, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, phaseId: phase.id, phase, persistence: 'stored', workflow: state });
     }
     if (phaseMatch && req.method === 'DELETE') {
       const project = targetProjectForPhaseWrite(state, req.body || {}, phaseMatch[1]);
@@ -287,7 +287,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, phaseId: phaseMatch[1], persistence: 'stored', workflow: state });
     }
     const phaseMoveMatch = path.match(/^\/phases\/([^/]+)\/move$/);
     if (phaseMoveMatch && req.method === 'POST') {
@@ -296,7 +296,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, phaseId: phaseMoveMatch[1], persistence: 'stored', workflow: state });
     }
     if (req.method === 'POST' && path === '/topics') {
       if (!req.body || !req.body.phase_id || !req.body.name || !req.body.name.trim()) {
@@ -308,7 +308,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
-      return send(res, 201, { success: true, projectId: project.id, topic, workflow: state });
+      return send(res, 201, { success: true, projectId: project.id, phaseId: req.body.phase_id, topicId: topic.id, topic, persistence: 'stored', workflow: state });
     }
     const match = path.match(/^\/topics\/([^/]+)$/);
     if (req.method === 'PATCH' && match) {
@@ -317,7 +317,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topic, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topicId: topic.id, topic, persistence: 'stored', workflow: state });
     }
     if (req.method === 'DELETE' && match) {
       const project = targetProjectForTopicWrite(state, req.body || {}, match[1]);
@@ -325,7 +325,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topicId: match[1], persistence: 'stored', workflow: state });
     }
     const topicMoveMatch = path.match(/^\/topics\/([^/]+)\/move$/);
     if (req.method === 'POST' && topicMoveMatch) {
@@ -334,7 +334,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topicId: topicMoveMatch[1], persistence: 'stored', workflow: state });
     }
     const notesMatch = path.match(/^\/topics\/([^/]+)\/notes$/);
     if (req.method === 'PATCH' && notesMatch) {
@@ -343,7 +343,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topic, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topicId: topic.id, topic, persistence: 'stored', workflow: state });
     }
     const manualMatch = path.match(/^\/topics\/([^/]+)\/manual-override$/);
     if (req.method === 'PATCH' && manualMatch) {
@@ -352,7 +352,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topic, progress: project.progress, workflow: state });
+      return send(res, 200, { success: true, projectId: project.id, topicId: topic.id, topic, progress: project.progress, persistence: 'stored', workflow: state });
     }
     const resourcesMatch = path.match(/^\/topics\/([^/]+)\/resources$/);
     if (req.method === 'GET' && resourcesMatch) {
@@ -374,7 +374,7 @@ export default async function handler(req, res) {
       syncTargetProject(state, project);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, ...result });
+      return send(res, 200, { success: true, projectId: project.id, topicId: mentorMatch[1], persistence: 'stored', ...result });
     }
     console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 404, errorMessage: 'Endpoint not found.' });
     return sendError(res, 404, 'Endpoint not found.', id);
