@@ -159,3 +159,62 @@ test('nested updates reject incorrect item ids inside the requested project', as
   assert.match(response.body.error, /Topic not found/);
   assert.equal(JSON.stringify(stateRef.current), before);
 });
+
+test('addTopic targets the requested project phase and preserves other projects', async () => {
+  const stateRef = { current: workflowState() };
+  const response = await callApi('POST', '/api/topics', {
+    projectId: '8cid8lk8',
+    phase_id: 'mini-phase',
+    name: 'Parse quoted strings',
+    description: 'Handle minishell quotes.'
+  }, stateRef);
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.body.success, true);
+  assert.equal(response.body.projectId, '8cid8lk8');
+  assert.equal(
+    projectById(stateRef.current, '8cid8lk8').curriculum.phases[0].topics.some((item) => item.name === 'Parse quoted strings'),
+    true
+  );
+  assert.equal(
+    projectById(stateRef.current, 'cube-id').curriculum.phases[0].topics.some((item) => item.name === 'Parse quoted strings'),
+    false
+  );
+
+  const reload = await callApi('GET', '/api/workflow', null, stateRef);
+  assert.equal(
+    projectById(reload.body.workflow, '8cid8lk8').curriculum.phases[0].topics.some((item) => item.name === 'Parse quoted strings'),
+    true
+  );
+});
+
+test('addTopic rejects missing projectId, invalid projectId, and wrong phase ids', async () => {
+  const stateRef = { current: workflowState() };
+  const before = JSON.stringify(stateRef.current);
+
+  const missing = await callApi('POST', '/api/topics', {
+    phase_id: 'mini-phase',
+    name: 'Should Not Add'
+  }, stateRef);
+  assert.equal(missing.statusCode, 400);
+  assert.match(missing.body.error, /projectId is required/);
+  assert.equal(JSON.stringify(stateRef.current), before);
+
+  const invalidProject = await callApi('POST', '/api/topics', {
+    projectId: 'missing-project',
+    phase_id: 'mini-phase',
+    name: 'Should Not Add'
+  }, stateRef);
+  assert.equal(invalidProject.statusCode, 404);
+  assert.match(invalidProject.body.error, /Project not found/);
+  assert.equal(JSON.stringify(stateRef.current), before);
+
+  const wrongPhase = await callApi('POST', '/api/topics', {
+    projectId: '8cid8lk8',
+    phase_id: 'cube-phase',
+    name: 'Should Not Add'
+  }, stateRef);
+  assert.equal(wrongPhase.statusCode, 404);
+  assert.match(wrongPhase.body.error, /Phase not found/);
+  assert.equal(JSON.stringify(stateRef.current), before);
+});
