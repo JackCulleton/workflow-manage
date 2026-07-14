@@ -84,6 +84,8 @@ async function readState() {
 }
 
 async function writeState(state) {
+  const migrated = migrateToSingleProject(state).state;
+  state = migrated || state;
   validateState(state);
   const url = `${process.env.SUPABASE_URL}/rest/v1/workflow_state?on_conflict=id`;
   const response = await fetch(url, {
@@ -98,42 +100,106 @@ function normaliseName(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function assertUniqueProjectIdentities(state) {
-  const projects = Array.isArray(state && state.projects) ? state.projects : [];
-  const ids = new Set();
-  const names = new Set();
-  for (const project of projects) {
-    if (!project.id) throw new Error('Every project requires a stable id.');
-    if (!project.title || !String(project.title).trim()) throw new Error('Every project requires a title.');
-    if (ids.has(project.id)) throw new Error('Duplicate project id.');
-    ids.add(project.id);
-    const name = normaliseName(project.title);
-    if (names.has(name)) throw new Error('Duplicate project name.');
-    names.add(name);
-  }
-  if (state.activeProjectId && projects.length && !projects.some((project) => project.id === state.activeProjectId)) {
-    throw new Error('activeProjectId must reference an existing project.');
-  }
+function phaseCount(project) {
+  return ((project && project.curriculum && project.curriculum.phases) || (project && project.phases) || []).length;
 }
 
-export function validateWorkflowReplacement(existing, next, options = {}) {
-  assertUniqueProjectIdentities(next);
-  const previousProjects = Array.isArray(existing && existing.projects) ? existing.projects : [];
-  const nextProjects = Array.isArray(next && next.projects) ? next.projects : [];
-  if (!previousProjects.length || !nextProjects.length) return;
+function topicCount(project) {
+  return ((project && project.curriculum && project.curriculum.phases) || (project && project.phases) || [])
+    .reduce((sum, phase) => sum + getPhaseTopicList(phase).length, 0);
+}
 
-  for (const previous of previousProjects) {
-    const sameName = nextProjects.find((project) => normaliseName(project.title) === normaliseName(previous.title));
-    if (sameName && sameName.id !== previous.id) {
-      throw new Error(`Project "${previous.title}" already exists with a different id.`);
-    }
-  }
+function getPhaseTopicList(phase) {
+  return [...(phase.topics || []), ...(phase.projects || []).flatMap((project) => project.topics || [])];
+}
 
-  const nextIds = new Set(nextProjects.map((project) => project.id));
-  const removed = previousProjects.filter((project) => !nextIds.has(project.id));
-  if (removed.length && !options.allowProjectDeletion) {
-    throw new Error('Workflow replacement would remove existing projects without explicit project deletion.');
+function projectName(project) {
+  return project && (project.name || project.title || (project.curriculum && project.curriculum.title) || 'Workflow');
+}
+
+function projectToWorkflow(project) {
+  normaliseProject(project);
+  const phases = (project.curriculum && project.curriculum.phases) || project.phases || [];
+  const name = projectName(project);
+  return {
+    title: name,
+    subtitle: project.subtitle || '',
+    teamMembers: project.teamMembers || [],
+    project: {
+      id: project.id,
+      name,
+      description: project.description || project.subtitle || '',
+      teamMembers: project.teamMembers || [],
+      phases
+    },
+    curriculum: {
+      ...(project.curriculum || {}),
+      id: (project.curriculum && project.curriculum.id) || project.id,
+      title: name,
+      phases,
+      glossary: (project.curriculum && project.curriculum.glossary) || [],
+      resources: (project.curriculum && project.curriculum.resources) || [],
+      versionHistory: (project.curriculum && project.curriculum.versionHistory) || []
+    },
+    phases,
+    progress: null,
+    migrationBackups: project.migrationBackups || []
+  };
+}
+
+export function migrateToSingleProject(input) {
+  const state = input || null;
+  if (!state) return { state: null, changed: false };
+  if (state.project && !Array.isArray(state.projects)) {
+    ensureCurriculumState(state);
+    state.project.phases = state.curriculum.phases;
+    state.project.teamMembers = state.teamMembers || state.project.teamMembers || [];
+    state.project.name = state.project.name || state.title || state.curriculum.title || 'Workflow';
+    state.progress = calculateProgress(state);
+    return { state, changed: false };
   }
+  const projects = Array.isArray(state.projects) ? state.projects : [];
+  let selected = projects.find((project) => project.id === state.activeProjectId);
+  if (!selected) {
+    const minishellProjects = projects.filter((project) => normaliseName(projectName(project)) === 'minishell');
+    selected = minishellProjects.sort((a, b) => topicCount(b) - topicCount(a) || phaseCount(b) - phaseCount(a))[0] || projects[0];
+  }
+  if (!selected) {
+    selected = {
+      id: 'single-project',
+      title: state.title || 'Workflow',
+      subtitle: state.subtitle || '',
+      teamMembers: state.teamMembers || [],
+      curriculum: state.curriculum || { id: 'single-project', title: state.title || 'Workflow', phases: state.phases || [], glossary: [], resources: [], versionHistory: [] },
+      phases: state.phases || []
+    };
+  }
+  const next = projectToWorkflow(selected);
+  next.migrationBackups = [
+    ...(Array.isArray(state.migrationBackups) ? state.migrationBackups : []),
+    ...(projects.length ? [{
+      id: `backup-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      reason: 'single-project-migration',
+      activeProjectId: state.activeProjectId || '',
+      projects
+    }] : [])
+  ];
+  ensureCurriculumState(next);
+  next.project.phases = next.curriculum.phases;
+  next.progress = calculateProgress(next);
+  return { state: next, changed: true };
+}
+
+function projectResponse(state) {
+  return {
+    id: state.project.id,
+    name: state.project.name,
+    description: state.project.description || '',
+    teamMembers: state.teamMembers || state.project.teamMembers || [],
+    phases: state.curriculum.phases,
+    progress: state.progress || calculateProgress(state)
+  };
 }
 
 function normaliseProject(project) {
@@ -142,57 +208,6 @@ function normaliseProject(project) {
   project.phases = project.phases || (project.curriculum && project.curriculum.phases) || [];
   project.progress = calculateProgress(project);
   return project;
-}
-
-export function requireTargetProject(state, input = {}) {
-  const projectId = input && input.projectId;
-  if (!projectId) throw new Error('projectId is required.');
-  const project = Array.isArray(state.projects) ? state.projects.find((item) => item.id === projectId) : null;
-  if (!project) throw new Error('Project not found');
-  return normaliseProject(project);
-}
-
-function allProjects(state) {
-  return Array.isArray(state.projects) ? state.projects.map((project) => normaliseProject(project)) : [];
-}
-
-function requireUniqueProjectByPhaseId(state, phaseId) {
-  const matches = allProjects(state).filter((project) => (project.curriculum?.phases || []).some((phase) => phase.id === phaseId));
-  if (!matches.length) throw new Error('Phase not found');
-  if (matches.length > 1) throw new Error('Phase id is ambiguous; projectId is required.');
-  return matches[0];
-}
-
-function requireUniqueProjectByTopicId(state, topicId) {
-  const matches = allProjects(state).filter((project) => (project.curriculum?.phases || []).some((phase) => findTopicInPhase(phase, topicId)));
-  if (!matches.length) throw new Error('Topic not found');
-  if (matches.length > 1) throw new Error('Topic id is ambiguous; projectId is required.');
-  return matches[0];
-}
-
-function findTopicInPhase(phase, topicId) {
-  if ((phase.topics || []).some((topic) => topic.id === topicId)) return true;
-  return (phase.projects || []).some((project) => (project.topics || []).some((topic) => topic.id === topicId));
-}
-
-function targetProjectForPhaseWrite(state, input = {}, phaseId) {
-  return input.projectId ? requireTargetProject(state, input) : requireUniqueProjectByPhaseId(state, phaseId);
-}
-
-function targetProjectForTopicWrite(state, input = {}, topicId) {
-  return input.projectId ? requireTargetProject(state, input) : requireUniqueProjectByTopicId(state, topicId);
-}
-
-function syncTargetProject(state, project) {
-  normaliseProject(project);
-  if (state.activeProjectId === project.id) {
-    state.title = project.title;
-    state.subtitle = project.subtitle || state.subtitle || '';
-    state.teamMembers = project.teamMembers || [];
-    state.curriculum = project.curriculum;
-    state.phases = project.phases;
-    state.progress = project.progress;
-  }
 }
 
 export default async function handler(req, res) {
@@ -221,32 +236,28 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET' && path === '/workflow') {
-      const workflow = await readState();
-      if (workflow) {
-        ensureCurriculumState(workflow);
-        assertUniqueProjectIdentities(workflow);
-        if (Array.isArray(workflow.projects)) workflow.projects.forEach((project) => normaliseProject(project));
-      }
+      const result = migrateToSingleProject(await readState());
+      const workflow = result.state;
+      if (workflow) ensureCurriculumState(workflow);
+      if (result.changed && workflow) await writeState(workflow);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { workflow });
+      return send(res, 200, { success: true, project: workflow ? projectResponse(workflow) : null, workflow });
     }
     if (req.method === 'PUT' && path === '/workflow') {
-      const existing = await readState();
-      const workflow = validateState(req.body && req.body.workflow);
-      validateWorkflowReplacement(existing, workflow, { allowProjectDeletion: Boolean(req.body && req.body.allowProjectDeletion) });
+      const workflow = validateState(migrateToSingleProject(req.body && req.body.workflow).state);
       await writeState(workflow);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, workflow, persistence: 'stored' });
+      return send(res, 200, { success: true, project: projectResponse(workflow), workflow, persistence: 'stored' });
     }
 
-    const state = await readState();
+    const migration = migrateToSingleProject(await readState());
+    const state = migration.state;
     if (!state) {
       console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 409, errorMessage: 'Open the dashboard once to initialise the workflow.' });
       return sendError(res, 409, 'Open the dashboard once to initialise the workflow.', id);
     }
     ensureCurriculumState(state);
-    assertUniqueProjectIdentities(state);
-    if (Array.isArray(state.projects)) state.projects.forEach((project) => normaliseProject(project));
+    if (migration.changed) await writeState(state);
 
     if (req.method === 'GET' && path === '/curriculum') {
       state.progress = calculateProgress(state);
@@ -265,94 +276,75 @@ export default async function handler(req, res) {
         console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 400, errorMessage: 'Phase name is required.' });
         return sendError(res, 400, 'Phase name is required.', id);
       }
-      const project = requireTargetProject(state, req.body);
-      const phase = addPhase(project, req.body);
-      syncTargetProject(state, project);
+      const phase = addPhase(state, req.body);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
-      return send(res, 201, { success: true, projectId: project.id, phaseId: phase.id, phase, persistence: 'stored', workflow: state });
+      return send(res, 201, { success: true, projectId: state.project.id, phaseId: phase.id, phase, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const phaseMatch = path.match(/^\/phases\/([^/]+)$/);
     if (phaseMatch && req.method === 'PATCH') {
-      const project = targetProjectForPhaseWrite(state, req.body || {}, phaseMatch[1]);
-      const phase = updatePhase(project, phaseMatch[1], req.body || {});
-      syncTargetProject(state, project);
+      const phase = updatePhase(state, phaseMatch[1], req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, phaseId: phase.id, phase, persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, phaseId: phase.id, phase, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (phaseMatch && req.method === 'DELETE') {
-      const project = targetProjectForPhaseWrite(state, req.body || {}, phaseMatch[1]);
-      deletePhase(project, phaseMatch[1]);
-      syncTargetProject(state, project);
+      deletePhase(state, phaseMatch[1]);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, phaseId: phaseMatch[1], persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, phaseId: phaseMatch[1], persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const phaseMoveMatch = path.match(/^\/phases\/([^/]+)\/move$/);
     if (phaseMoveMatch && req.method === 'POST') {
-      const project = targetProjectForPhaseWrite(state, req.body || {}, phaseMoveMatch[1]);
-      movePhase(project, phaseMoveMatch[1], (req.body && req.body.direction) || '');
-      syncTargetProject(state, project);
+      movePhase(state, phaseMoveMatch[1], (req.body && req.body.direction) || '');
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, phaseId: phaseMoveMatch[1], persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, phaseId: phaseMoveMatch[1], persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/topics') {
-      if (!req.body || !req.body.phase_id || !req.body.name || !req.body.name.trim()) {
+      const phaseId = req.body && (req.body.phaseId || req.body.phase_id);
+      if (!req.body || !phaseId || !req.body.name || !req.body.name.trim()) {
         console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 400, errorMessage: 'phase_id and name are required.' });
         return sendError(res, 400, 'phase_id and name are required.', id);
       }
-      const project = req.body.projectId ? requireTargetProject(state, req.body) : requireUniqueProjectByPhaseId(state, req.body.phase_id);
-      const topic = addTopic(project, req.body);
-      syncTargetProject(state, project);
+      const topic = addTopic(state, { ...req.body, phase_id: phaseId });
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
-      return send(res, 201, { success: true, projectId: project.id, phaseId: req.body.phase_id, topicId: topic.id, topic, persistence: 'stored', workflow: state });
+      return send(res, 201, { success: true, projectId: state.project.id, phaseId, topicId: topic.id, topic, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const match = path.match(/^\/topics\/([^/]+)$/);
     if (req.method === 'PATCH' && match) {
-      const project = targetProjectForTopicWrite(state, req.body || {}, match[1]);
-      const topic = updateTopic(project, match[1], req.body || {});
-      syncTargetProject(state, project);
+      const topic = updateTopic(state, match[1], req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topicId: topic.id, topic, persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: topic.id, topic, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'DELETE' && match) {
-      const project = targetProjectForTopicWrite(state, req.body || {}, match[1]);
-      deleteTopic(project, match[1]);
-      syncTargetProject(state, project);
+      deleteTopic(state, match[1]);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topicId: match[1], persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: match[1], persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const topicMoveMatch = path.match(/^\/topics\/([^/]+)\/move$/);
     if (req.method === 'POST' && topicMoveMatch) {
-      const project = targetProjectForTopicWrite(state, req.body || {}, topicMoveMatch[1]);
-      moveTopic(project, topicMoveMatch[1], (req.body && req.body.direction) || '');
-      syncTargetProject(state, project);
+      moveTopic(state, topicMoveMatch[1], (req.body && req.body.direction) || '');
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topicId: topicMoveMatch[1], persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: topicMoveMatch[1], persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const notesMatch = path.match(/^\/topics\/([^/]+)\/notes$/);
     if (req.method === 'PATCH' && notesMatch) {
-      const project = targetProjectForTopicWrite(state, req.body || {}, notesMatch[1]);
-      const topic = updateTopicNotes(project, notesMatch[1], (req.body && req.body.notes) || '');
-      syncTargetProject(state, project);
+      const topic = updateTopicNotes(state, notesMatch[1], (req.body && req.body.notes) || '');
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topicId: topic.id, topic, persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: topic.id, topic, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const manualMatch = path.match(/^\/topics\/([^/]+)\/manual-override$/);
     if (req.method === 'PATCH' && manualMatch) {
-      const project = targetProjectForTopicWrite(state, req.body || {}, manualMatch[1]);
-      const topic = setManualOverride(project, manualMatch[1], req.body || {});
-      syncTargetProject(state, project);
+      const topic = setManualOverride(state, manualMatch[1], req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topicId: topic.id, topic, progress: project.progress, persistence: 'stored', workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: topic.id, topic, progress: state.progress, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const resourcesMatch = path.match(/^\/topics\/([^/]+)\/resources$/);
     if (req.method === 'GET' && resourcesMatch) {
@@ -369,12 +361,10 @@ export default async function handler(req, res) {
     }
     const mentorMatch = path.match(/^\/topics\/([^/]+)\/mentor$/);
     if (req.method === 'POST' && mentorMatch) {
-      const project = targetProjectForTopicWrite(state, req.body || {}, mentorMatch[1]);
-      const result = await mentorReply(project, mentorMatch[1], (req.body && req.body.question) || '');
-      syncTargetProject(state, project);
+      const result = await mentorReply(state, mentorMatch[1], (req.body && req.body.question) || '');
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, projectId: project.id, topicId: mentorMatch[1], persistence: 'stored', ...result });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: mentorMatch[1], persistence: 'stored', ...result });
     }
     console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 404, errorMessage: 'Endpoint not found.' });
     return sendError(res, 404, 'Endpoint not found.', id);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/index.js';
+import handler, { migrateToSingleProject } from '../api/index.js';
 
 function topic(id, name) {
   return {
@@ -18,12 +18,16 @@ function topic(id, name) {
   };
 }
 
-function project(id, title, phases) {
+function phase(id, name, topics = []) {
+  return { id, name, description: '', assignedMemberIds: [], projects: [], topics, documents: [] };
+}
+
+function project(id, title, phases, teamMembers = []) {
   return {
     id,
     title,
-    subtitle: '',
-    teamMembers: [],
+    subtitle: `${title} subtitle`,
+    teamMembers,
     curriculum: {
       id: `${id}-curriculum`,
       title,
@@ -37,17 +41,21 @@ function project(id, title, phases) {
   };
 }
 
-function phase(id, name, topics = []) {
-  return { id, name, description: '', assignedMemberIds: [], projects: [], topics, documents: [] };
-}
-
-function workflowState() {
+function legacyWorkflowState() {
   const cube = project('cube-id', 'Cube3D', [phase('cube-phase', 'Cube Scope', [topic('cube-topic', 'Cube Topic')])]);
-  const minishell = project('8cid8lk8', 'minishell', [phase('mini-phase', 'Mini Existing', [topic('mini-topic', 'Mini Topic')])]);
+  const minishell = project(
+    '4u4nqhe5',
+    'minishell',
+    [
+      phase('mini-phase-1', 'Scope and setup', [topic('mini-topic-1', 'Read minishell subject')]),
+      phase('mini-phase-2', 'Parsing', [topic('mini-topic-2', 'Tokenization'), topic('mini-topic-3', 'Quotes')])
+    ],
+    [{ id: 'member-1', name: 'Ada', color: '#f97316' }]
+  );
   return {
     title: cube.title,
     subtitle: cube.subtitle,
-    activeProjectId: cube.id,
+    activeProjectId: minishell.id,
     projects: [cube, minishell],
     curriculum: cube.curriculum,
     phases: cube.phases,
@@ -94,200 +102,105 @@ async function callApi(method, url, body, stateRef) {
   return res;
 }
 
-function projectById(state, id) {
-  return state.projects.find((item) => item.id === id);
-}
+test('legacy multi-project state migrates to one stable minishell project with backup', () => {
+  const legacy = legacyWorkflowState();
+  const result = migrateToSingleProject(structuredClone(legacy));
 
-test('addPhase targets the requested project and persists after reload', async () => {
-  const stateRef = { current: workflowState() };
+  assert.equal(result.changed, true);
+  assert.equal(result.state.project.id, '4u4nqhe5');
+  assert.equal(result.state.project.name, 'minishell');
+  assert.equal(result.state.curriculum.phases.length, 2);
+  assert.equal(result.state.teamMembers[0].name, 'Ada');
+  assert.equal(Array.isArray(result.state.projects), false);
+  assert.equal(result.state.activeProjectId, undefined);
+  assert.equal(result.state.migrationBackups.length, 1);
+  assert.equal(result.state.migrationBackups[0].projects.length, 2);
+});
+
+test('repeated getWorkflow calls return the same single project data', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  const first = await callApi('GET', '/api/workflow', null, stateRef);
+  const second = await callApi('GET', '/api/workflow', null, stateRef);
+  const third = await callApi('GET', '/api/workflow', null, stateRef);
+
+  assert.equal(first.statusCode, 200);
+  assert.equal(first.body.project.id, '4u4nqhe5');
+  assert.equal(second.body.project.id, '4u4nqhe5');
+  assert.equal(third.body.project.id, '4u4nqhe5');
+  assert.equal(first.body.workflow.curriculum.phases.length, third.body.workflow.curriculum.phases.length);
+  assert.equal(Array.isArray(third.body.workflow.projects), false);
+  assert.equal(third.body.workflow.activeProjectId, undefined);
+  assert.equal(stateRef.current.project.id, '4u4nqhe5');
+  assert.equal(stateRef.current.migrationBackups.length, 1);
+});
+
+test('addPhase writes to the single project without accepting projectId', async () => {
+  const stateRef = { current: legacyWorkflowState() };
   const response = await callApi('POST', '/api/phases', {
-    projectId: '8cid8lk8',
-    name: 'Temporary API Target Test',
+    name: 'Temporary single project phase',
     description: 'temporary'
   }, stateRef);
 
   assert.equal(response.statusCode, 201);
   assert.equal(response.body.success, true);
-  assert.equal(response.body.projectId, '8cid8lk8');
-  assert.equal(response.body.phaseId, response.body.phase.id);
+  assert.equal(response.body.projectId, '4u4nqhe5');
   assert.equal(response.body.persistence, 'stored');
-  assert.equal(projectById(stateRef.current, '8cid8lk8').curriculum.phases.some((item) => item.name === 'Temporary API Target Test'), true);
-  assert.equal(projectById(stateRef.current, 'cube-id').curriculum.phases.some((item) => item.name === 'Temporary API Target Test'), false);
-  assert.equal(stateRef.current.curriculum.phases.some((item) => item.name === 'Temporary API Target Test'), false);
+  assert.equal(stateRef.current.curriculum.phases.some((item) => item.name === 'Temporary single project phase'), true);
+  assert.equal(stateRef.current.project.phases.some((item) => item.name === 'Temporary single project phase'), true);
 
   const reload = await callApi('GET', '/api/workflow', null, stateRef);
-  assert.equal(projectById(reload.body.workflow, '8cid8lk8').curriculum.phases.some((item) => item.name === 'Temporary API Target Test'), true);
-
-  const phaseId = response.body.phase.id;
-  const cleanup = await callApi('DELETE', `/api/phases/${phaseId}`, { projectId: '8cid8lk8' }, stateRef);
-  assert.equal(cleanup.statusCode, 200);
-  assert.equal(projectById(stateRef.current, '8cid8lk8').curriculum.phases.some((item) => item.id === phaseId), false);
+  assert.equal(reload.body.workflow.curriculum.phases.some((item) => item.name === 'Temporary single project phase'), true);
 });
 
-test('addPhase to Cube3D does not modify minishell', async () => {
-  const stateRef = { current: workflowState() };
-  const response = await callApi('POST', '/api/phases', { projectId: 'cube-id', name: 'Cube Only' }, stateRef);
-
-  assert.equal(response.statusCode, 201);
-  assert.equal(projectById(stateRef.current, 'cube-id').curriculum.phases.some((item) => item.name === 'Cube Only'), true);
-  assert.equal(projectById(stateRef.current, '8cid8lk8').curriculum.phases.some((item) => item.name === 'Cube Only'), false);
-});
-
-test('missing or invalid projectId is rejected without active-project fallback', async () => {
-  const stateRef = { current: workflowState() };
-  const before = JSON.stringify(stateRef.current);
-
-  const missing = await callApi('POST', '/api/phases', { name: 'Should Not Add' }, stateRef);
-  assert.equal(missing.statusCode, 400);
-  assert.match(missing.body.error, /projectId is required/);
-  assert.equal(JSON.stringify(stateRef.current), before);
-
-  const invalid = await callApi('POST', '/api/phases', { projectId: 'missing-project', name: 'Should Not Add' }, stateRef);
-  assert.equal(invalid.statusCode, 404);
-  assert.match(invalid.body.error, /Project not found/);
-  assert.equal(JSON.stringify(stateRef.current), before);
-});
-
-test('nested updates reject incorrect item ids inside the requested project', async () => {
-  const stateRef = { current: workflowState() };
-  const before = JSON.stringify(stateRef.current);
-
-  const response = await callApi('PATCH', '/api/topics/cube-topic', {
-    projectId: '8cid8lk8',
-    name: 'Wrongly Updated'
-  }, stateRef);
-
-  assert.equal(response.statusCode, 404);
-  assert.match(response.body.error, /Topic not found/);
-  assert.equal(JSON.stringify(stateRef.current), before);
-});
-
-test('addTopic targets the requested project phase and preserves other projects', async () => {
-  const stateRef = { current: workflowState() };
+test('addTopic uses the exact phase id and persists after a fresh request', async () => {
+  const stateRef = { current: legacyWorkflowState() };
   const response = await callApi('POST', '/api/topics', {
-    projectId: '8cid8lk8',
-    phase_id: 'mini-phase',
-    name: 'Parse quoted strings',
-    description: 'Handle minishell quotes.'
+    phaseId: 'mini-phase-2',
+    name: 'Temporary parser topic',
+    description: 'temporary'
   }, stateRef);
 
   assert.equal(response.statusCode, 201);
-  assert.equal(response.body.success, true);
-  assert.equal(response.body.projectId, '8cid8lk8');
-  assert.equal(response.body.phaseId, 'mini-phase');
+  assert.equal(response.body.phaseId, 'mini-phase-2');
   assert.equal(response.body.topicId, response.body.topic.id);
-  assert.equal(response.body.persistence, 'stored');
   assert.equal(
-    projectById(stateRef.current, '8cid8lk8').curriculum.phases[0].topics.some((item) => item.name === 'Parse quoted strings'),
+    stateRef.current.curriculum.phases.find((item) => item.id === 'mini-phase-2').topics.some((item) => item.name === 'Temporary parser topic'),
     true
-  );
-  assert.equal(
-    projectById(stateRef.current, 'cube-id').curriculum.phases[0].topics.some((item) => item.name === 'Parse quoted strings'),
-    false
   );
 
   const reload = await callApi('GET', '/api/workflow', null, stateRef);
   assert.equal(
-    projectById(reload.body.workflow, '8cid8lk8').curriculum.phases[0].topics.some((item) => item.name === 'Parse quoted strings'),
+    reload.body.workflow.curriculum.phases.find((item) => item.id === 'mini-phase-2').topics.some((item) => item.name === 'Temporary parser topic'),
     true
   );
 });
 
-test('addTopic rejects invalid projectId and wrong phase ids', async () => {
-  const stateRef = { current: workflowState() };
+test('missing or incorrect nested ids fail without fallback', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('GET', '/api/workflow', null, stateRef);
   const before = JSON.stringify(stateRef.current);
 
-  const invalidProject = await callApi('POST', '/api/topics', {
-    projectId: 'missing-project',
-    phase_id: 'mini-phase',
-    name: 'Should Not Add'
-  }, stateRef);
-  assert.equal(invalidProject.statusCode, 404);
-  assert.match(invalidProject.body.error, /Project not found/);
-  assert.equal(JSON.stringify(stateRef.current), before);
+  const missingPhase = await callApi('POST', '/api/topics', { phaseId: 'missing-phase', name: 'Should not add' }, stateRef);
+  assert.equal(missingPhase.statusCode, 404);
+  assert.match(missingPhase.body.error, /Phase not found/);
 
-  const wrongPhase = await callApi('POST', '/api/topics', {
-    projectId: '8cid8lk8',
-    phase_id: 'cube-phase',
-    name: 'Should Not Add'
-  }, stateRef);
-  assert.equal(wrongPhase.statusCode, 404);
-  assert.match(wrongPhase.body.error, /Phase not found/);
+  const wrongTopic = await callApi('PATCH', '/api/topics/cube-topic', { name: 'Should not update' }, stateRef);
+  assert.equal(wrongTopic.statusCode, 404);
+  assert.match(wrongTopic.body.error, /Topic not found/);
+
   assert.equal(JSON.stringify(stateRef.current), before);
 });
 
-test('repeated getWorkflow calls preserve project ids and data', async () => {
-  const stateRef = { current: workflowState() };
-  const first = await callApi('GET', '/api/workflow', null, stateRef);
-  const second = await callApi('GET', '/api/workflow', null, stateRef);
-  const third = await callApi('GET', '/api/workflow', null, stateRef);
+test('replaceWorkflow accepts legacy input by migrating it to the selected single project', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  const replacement = structuredClone(legacyWorkflowState());
+  replacement.activeProjectId = 'cube-id';
 
-  assert.equal(projectById(first.body.workflow, '8cid8lk8').title, 'minishell');
-  assert.equal(projectById(second.body.workflow, '8cid8lk8').title, 'minishell');
-  assert.equal(projectById(third.body.workflow, '8cid8lk8').title, 'minishell');
-  assert.deepEqual(
-    first.body.workflow.projects.map((item) => item.id),
-    third.body.workflow.projects.map((item) => item.id)
-  );
-});
+  const response = await callApi('PUT', '/api/workflow', { workflow: replacement }, stateRef);
 
-test('replaceWorkflow rejects duplicate project names and id churn', async () => {
-  const stateRef = { current: workflowState() };
-  const duplicate = structuredClone(stateRef.current);
-  duplicate.projects.push(project('other-mini', 'minishell', []));
-  const duplicateResponse = await callApi('PUT', '/api/workflow', { workflow: duplicate }, stateRef);
-  assert.equal(duplicateResponse.statusCode, 400);
-  assert.match(duplicateResponse.body.error, /Duplicate project name/);
-
-  const churn = structuredClone(stateRef.current);
-  projectById(churn, '8cid8lk8').id = '4u4nqhe5';
-  churn.activeProjectId = churn.projects[0].id;
-  const churnResponse = await callApi('PUT', '/api/workflow', { workflow: churn }, stateRef);
-  assert.equal(churnResponse.statusCode, 400);
-  assert.match(churnResponse.body.error, /different id/);
-});
-
-test('replaceWorkflow rejects project removal unless deletion is explicit', async () => {
-  const stateRef = { current: workflowState() };
-  const before = JSON.stringify(stateRef.current);
-  const removed = structuredClone(stateRef.current);
-  removed.projects = removed.projects.filter((item) => item.id !== '8cid8lk8');
-
-  const rejected = await callApi('PUT', '/api/workflow', { workflow: removed }, stateRef);
-  assert.equal(rejected.statusCode, 400);
-  assert.match(rejected.body.error, /remove existing projects/);
-  assert.equal(JSON.stringify(stateRef.current), before);
-
-  const accepted = await callApi('PUT', '/api/workflow', { workflow: removed, allowProjectDeletion: true }, stateRef);
-  assert.equal(accepted.statusCode, 200);
-  assert.equal(projectById(stateRef.current, '8cid8lk8'), undefined);
-});
-
-test('addTopic may target a globally unique phase id without projectId', async () => {
-  const stateRef = { current: workflowState() };
-  const response = await callApi('POST', '/api/topics', {
-    phase_id: 'mini-phase',
-    name: 'Unique phase target'
-  }, stateRef);
-
-  assert.equal(response.statusCode, 201);
-  assert.equal(response.body.projectId, '8cid8lk8');
-  assert.equal(projectById(stateRef.current, '8cid8lk8').curriculum.phases[0].topics.some((item) => item.name === 'Unique phase target'), true);
-  assert.equal(projectById(stateRef.current, 'cube-id').curriculum.phases[0].topics.some((item) => item.name === 'Unique phase target'), false);
-});
-
-test('addTopic rejects ambiguous phase ids without projectId', async () => {
-  const stateRef = { current: workflowState() };
-  projectById(stateRef.current, 'cube-id').curriculum.phases[0].id = 'shared-phase';
-  projectById(stateRef.current, 'cube-id').phases[0].id = 'shared-phase';
-  projectById(stateRef.current, '8cid8lk8').curriculum.phases[0].id = 'shared-phase';
-  projectById(stateRef.current, '8cid8lk8').phases[0].id = 'shared-phase';
-
-  const response = await callApi('POST', '/api/topics', {
-    phase_id: 'shared-phase',
-    name: 'Ambiguous target'
-  }, stateRef);
-
-  assert.equal(response.statusCode, 400);
-  assert.match(response.body.error, /ambiguous/);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.project.id, 'cube-id');
+  assert.equal(response.body.workflow.project.name, 'Cube3D');
+  assert.equal(Array.isArray(response.body.workflow.projects), false);
+  assert.equal(response.body.workflow.migrationBackups[0].projects.length, 2);
 });

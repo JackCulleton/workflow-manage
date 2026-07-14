@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Mountain Scope Curriculum Engine
   description: Read, edit, mentor and track curriculum-driven learning roadmaps.
-  version: 2.0.0
+  version: 3.0.0
 servers:
   - url: https://workflow-manage.vercel.app/api
 paths:
@@ -20,7 +20,7 @@ paths:
     put:
       operationId: replaceWorkflow
       summary: Replace the full workflow after a deliberate bulk edit.
-      description: Replaces the workflow only after project identities are validated. Project deletion requires allowProjectDeletion.
+      description: Replaces the single stored workflow. Legacy multi-project payloads are migrated to one selected project and backed up.
       requestBody:
         required: true
         content:
@@ -31,8 +31,6 @@ paths:
               properties:
                 workflow:
                   $ref: '#/components/schemas/Workflow'
-                allowProjectDeletion:
-                  type: boolean
       responses:
         '200': { description: Workflow saved }
   /curriculum:
@@ -66,16 +64,15 @@ paths:
     post:
       operationId: addPhase
       summary: Add a phase to the roadmap.
-      description: Adds a phase only to the project identified by projectId. It never uses the active project implicitly.
+      description: Adds a phase to the dashboard's single stored project. There is no active project fallback or project selector.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [projectId, name]
+              required: [name]
               properties:
-                projectId: { type: string }
                 name: { type: string }
                 description: { type: string }
       responses:
@@ -84,7 +81,7 @@ paths:
     patch:
       operationId: updatePhase
       summary: Rename or update a phase.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Updates the phase with the exact phaseId inside the single stored project.
       parameters:
         - name: phaseId
           in: path
@@ -96,9 +93,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [projectId]
               properties:
-                projectId: { type: string }
                 name: { type: string }
                 description: { type: string }
                 assignedMemberIds:
@@ -109,28 +104,19 @@ paths:
     delete:
       operationId: deletePhase
       summary: Delete a phase and all topics inside it.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Deletes the phase with the exact phaseId inside the single stored project.
       parameters:
         - name: phaseId
           in: path
           required: true
           schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [projectId]
-              properties:
-                projectId: { type: string }
       responses:
         '200': { description: Phase deleted }
   /phases/{phaseId}/move:
     post:
       operationId: movePhase
       summary: Move a phase up or down.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Moves the phase with the exact phaseId inside the single stored project.
       parameters:
         - name: phaseId
           in: path
@@ -142,9 +128,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [projectId, direction]
+              required: [direction]
               properties:
-                projectId: { type: string }
                 direction:
                   type: string
                   enum: [up, down]
@@ -154,17 +139,16 @@ paths:
     post:
       operationId: addTopic
       summary: Add a topic to an existing phase.
-      description: Adds a topic to the project identified by projectId, or to the project containing phase_id when that phase ID is globally unique. It never uses the active project implicitly.
+      description: Adds a topic to the exact phaseId inside the dashboard's single stored project.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [phase_id, name]
+              required: [phaseId, name]
               properties:
-                projectId: { type: string }
-                phase_id: { type: string }
+                phaseId: { type: string }
                 name: { type: string }
                 description: { type: string }
                 status: { $ref: '#/components/schemas/TopicStatus' }
@@ -186,7 +170,7 @@ paths:
     patch:
       operationId: updateTopic
       summary: Update topic curriculum fields or status.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Updates the topic with the exact topicId inside the single stored project.
       parameters:
         - name: topicId
           in: path
@@ -198,9 +182,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [projectId]
               properties:
-                projectId: { type: string }
                 name: { type: string }
                 description: { type: string }
                 status: { $ref: '#/components/schemas/TopicStatus' }
@@ -228,28 +210,19 @@ paths:
     delete:
       operationId: deleteTopic
       summary: Delete a topic and its cached resources/progress.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Deletes the topic with the exact topicId inside the single stored project.
       parameters:
         - name: topicId
           in: path
           required: true
           schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [projectId]
-              properties:
-                projectId: { type: string }
       responses:
         '200': { description: Topic deleted }
   /topics/{topicId}/move:
     post:
       operationId: moveTopic
       summary: Move a topic up or down within its phase.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Moves the topic with the exact topicId inside the single stored project.
       parameters:
         - name: topicId
           in: path
@@ -261,9 +234,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [projectId, direction]
+              required: [direction]
               properties:
-                projectId: { type: string }
                 direction:
                   type: string
                   enum: [up, down]
@@ -288,7 +260,7 @@ paths:
     post:
       operationId: askTopicMentor
       summary: Ask the topic mentor using stored curriculum context and notes.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Uses the topic with the exact topicId inside the single stored project.
       parameters:
         - name: topicId
           in: path
@@ -300,9 +272,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [projectId]
               properties:
-                projectId: { type: string }
                 question: { type: string }
       responses:
         '200': { description: Mentor reply }
@@ -310,7 +280,7 @@ paths:
     patch:
       operationId: updateTopicNotes
       summary: Update personal notes for a topic without changing the official curriculum.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Updates notes for the topic with the exact topicId inside the single stored project.
       parameters:
         - name: topicId
           in: path
@@ -322,9 +292,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [projectId]
               properties:
-                projectId: { type: string }
                 notes: { type: string }
       responses:
         '200': { description: Notes updated }
@@ -332,7 +300,7 @@ paths:
     patch:
       operationId: setManualOverride
       summary: Mark or clear a transparent manual completion override.
-      description: Targets only the project identified by projectId. Does not use the active project implicitly.
+      description: Marks or clears completion for the topic with the exact topicId inside the single stored project.
       parameters:
         - name: topicId
           in: path
@@ -344,9 +312,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [projectId]
               properties:
-                projectId: { type: string }
                 completed: { type: boolean }
                 reason: { type: string }
       responses:
@@ -421,9 +387,13 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-        topics:
+        description: { type: string }
+        teamMembers:
           type: array
-          items: { $ref: '#/components/schemas/Topic' }
+          items: { $ref: '#/components/schemas/TeamMember' }
+        phases:
+          type: array
+          items: { $ref: '#/components/schemas/Phase' }
     Phase:
       type: object
       properties:
@@ -433,9 +403,6 @@ components:
         assignedMemberIds:
           type: array
           items: { type: string }
-        projects:
-          type: array
-          items: { $ref: '#/components/schemas/Project' }
         topics:
           type: array
           items: { $ref: '#/components/schemas/Topic' }
@@ -478,36 +445,27 @@ components:
         estimatedRemainingWork: { type: string }
     Workflow:
       type: object
-      required: [title, subtitle, phases]
+      required: [title, subtitle, project, phases]
       properties:
         title: { type: string }
         subtitle: { type: string }
-        activeProjectId: { type: string }
+        project: { $ref: '#/components/schemas/Project' }
         teamMembers:
           type: array
           items: { $ref: '#/components/schemas/TeamMember' }
-        projects:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string }
-              title: { type: string }
-              subtitle: { type: string }
-              teamMembers:
-                type: array
-                items: { $ref: '#/components/schemas/TeamMember' }
-              curriculum: { $ref: '#/components/schemas/Curriculum' }
-              phases:
-                type: array
-                items: { $ref: '#/components/schemas/Phase' }
-              progress: { $ref: '#/components/schemas/Progress' }
         curriculum: { $ref: '#/components/schemas/Curriculum' }
         phases:
           type: array
           items: { $ref: '#/components/schemas/Phase' }
         progress: { $ref: '#/components/schemas/Progress' }
+        migrationBackups:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
     WorkflowResponse:
       type: object
       properties:
+        success: { type: boolean }
+        project: { $ref: '#/components/schemas/Project' }
         workflow: { $ref: '#/components/schemas/Workflow' }

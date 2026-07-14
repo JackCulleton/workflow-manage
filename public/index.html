@@ -184,51 +184,19 @@ header{
 .bar{height:8px;border-radius:999px;background:var(--panel-3);overflow:hidden;margin-top:10px}
 .fill{height:100%;background:var(--orange);width:0}
 .section-title{font-size:13px;font-weight:800;margin:18px 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
-.project-selector{position:relative;display:inline-block}
-.project-button{
+.project-title{
   border:1px solid rgba(255,255,255,.07);
   background:rgba(18,20,26,.88);
   color:var(--text);
   font-size:16px;
   font-weight:800;
   line-height:1.15;
-  cursor:pointer;
   padding:10px 16px;
   border-radius:999px;
   text-align:center;
   min-width:210px;
   box-shadow:0 12px 34px rgba(0,0,0,.18);
 }
-.project-menu{
-  position:absolute;
-  left:50%;
-  transform:translateX(-50%);
-  top:calc(100% + 10px);
-  min-width:250px;
-  background:var(--panel-2);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:12px;
-  padding:8px;
-  z-index:10;
-  display:none;
-  box-shadow:0 18px 40px rgba(0,0,0,.35);
-  animation:fadeUp .16s ease;
-}
-.project-menu.open{display:block}
-.project-option{
-  width:100%;
-  border:none;
-  background:transparent;
-  color:var(--text);
-  text-align:left;
-  padding:9px 10px;
-  border-radius:7px;
-  cursor:pointer;
-  font-weight:700;
-}
-.project-option:hover{background:var(--panel-3)}
-.project-option.active{color:var(--orange)}
-.project-option.danger-option{color:var(--red)}
 .roadmap-shell{margin-top:0}
 .phase-rail{
   display:flex;
@@ -455,7 +423,7 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
   .workspace-head{flex-direction:column}
   .workspace-grid,.two-col,.field-row{grid-template-columns:1fr}
   .actions{justify-content:flex-start}
-  .project-button{width:100%;min-width:0}
+  .project-title{width:100%;min-width:0}
   .phase{flex-basis:165px}
   .topic-panel,.resources-panel{position:static}
   .roadmap-head{align-items:flex-start;flex-direction:column}
@@ -471,10 +439,7 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
       <span>Workspace</span>
     </div>
 
-    <div class="project-selector">
-      <button class="project-button" id="projectButton">▾ Mountain Scope</button>
-      <div class="project-menu" id="projectMenu"></div>
-    </div>
+    <div class="project-title" id="projectTitle">Mountain Scope</div>
 
     <div class="top-actions">
       <div class="avatar" aria-label="User avatar">J</div>
@@ -567,34 +532,20 @@ function blankTopic(name){
 
 function defaultState(){
   const phases = [
-    { id:uid(), name:'Requirements', projects:[], topics:[blankTopic('Read the official project brief'), blankTopic('Extract mandatory requirements')] },
-    { id:uid(), name:'Planning', projects:[], topics:[blankTopic('Design project phases'), blankTopic('Identify learning topics')] },
-    { id:uid(), name:'Build', projects:[], topics:[blankTopic('Implement core requirements'), blankTopic('Review completion criteria')] }
+    { id:uid(), name:'Requirements', topics:[blankTopic('Read the official project brief'), blankTopic('Extract mandatory requirements')] },
+    { id:uid(), name:'Planning', topics:[blankTopic('Design project phases'), blankTopic('Identify learning topics')] },
+    { id:uid(), name:'Build', topics:[blankTopic('Implement core requirements'), blankTopic('Review completion criteria')] }
   ];
+  const projectId = uid();
   return {
     title:'Mountain Scope',
     subtitle:'Curriculum-driven learning roadmap with evidence-based progress.',
+    project:{ id:projectId, name:'Mountain Scope', description:'', teamMembers:[], phases },
+    teamMembers:[],
     curriculum:{ id:uid(), title:'42 Project Curriculum', source:{name:'Default roadmap',type:'seed',importedAt:now()}, phases, glossary:[], resources:[], versionHistory:[] },
     phases: phases.map(p=>({ id:p.id, name:p.name, topics:p.topics, documents:[] })),
     progress:null
   };
-}
-
-function projectFromRoot(input){
-  return {
-    id:input.activeProjectId || uid(),
-    title:input.curriculum?.title || input.title || 'Mountain Scope',
-    subtitle:input.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.',
-    teamMembers:normaliseTeamMembers(input.teamMembers),
-    curriculum:input.curriculum,
-    phases:input.phases || [],
-    progress:input.progress || null
-  };
-}
-
-function blankProject(title){
-  const curriculum = { id:uid(), title, source:{name:'Manual project',type:'manual',importedAt:now()}, phases:[], glossary:[], resources:[], versionHistory:[] };
-  return { id:uid(), title, subtitle:'Curriculum-driven learning roadmap with evidence-based progress.', teamMembers:[], curriculum, phases:[], progress:null };
 }
 
 function normaliseTeamMembers(members){
@@ -677,79 +628,48 @@ function readLocal(){
 }
 
 function migrate(input){
-  const next = input || defaultState();
+  let next = input || defaultState();
   delete next.repository;
+  if(Array.isArray(next.projects)){
+    const selected = next.projects.find(project=>project.id===next.activeProjectId)
+      || next.projects.filter(project=>String(project.title || project.name || project.curriculum?.title || '').trim().toLowerCase()==='minishell')
+        .sort((a,b)=>((b.curriculum?.phases||b.phases||[]).flatMap(phaseTopics).length)-((a.curriculum?.phases||a.phases||[]).flatMap(phaseTopics).length))[0]
+      || next.projects[0];
+    if(selected){
+      next = {
+        title:selected.title || selected.name || selected.curriculum?.title || 'Mountain Scope',
+        subtitle:selected.subtitle || next.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.',
+        teamMembers:normaliseTeamMembers(selected.teamMembers || next.teamMembers),
+        project:{ id:selected.id || uid(), name:selected.title || selected.name || selected.curriculum?.title || 'Mountain Scope', description:selected.description || selected.subtitle || '', teamMembers:selected.teamMembers || [], phases:(selected.curriculum?.phases || selected.phases || []) },
+        curriculum:selected.curriculum || { id:selected.id || uid(), title:selected.title || selected.name || 'Mountain Scope', phases:selected.phases || [], glossary:[], resources:[], versionHistory:[] },
+        phases:selected.phases || selected.curriculum?.phases || [],
+        progress:selected.progress || next.progress || null,
+        migrationBackups:next.migrationBackups || []
+      };
+    }
+  }
   if(!next.curriculum){
     next.curriculum = {
       id:uid(), title:next.title || 'Mountain Scope', source:{name:'Migrated workflow',type:'legacy',importedAt:now()},
-      phases:(next.phases||[]).map(p=>({ id:p.id||uid(), name:p.name, assignedMemberIds:Array.isArray(p.assignedMemberIds)?p.assignedMemberIds:[], projects:[], topics:(p.topics||[]).map(t=>enrichTopic(t)) })),
+      phases:(next.phases||[]).map(p=>({ id:p.id||uid(), name:p.name, assignedMemberIds:Array.isArray(p.assignedMemberIds)?p.assignedMemberIds:[], topics:(p.topics||[]).map(t=>enrichTopic(t)) })),
       glossary:[], resources:[], versionHistory:[]
     };
   }
   next.curriculum.phases.forEach(p=>{
-    if(!p.projects) p.projects = [];
     if(!Array.isArray(p.assignedMemberIds)) p.assignedMemberIds = [];
     p.topics = (p.topics||[]).map(enrichTopic);
-    p.projects.forEach(project=>{ project.topics = (project.topics||[]).map(enrichTopic); });
   });
+  next.project = next.project || { id:uid(), name:next.title || next.curriculum.title || 'Mountain Scope', description:next.subtitle || '', teamMembers:next.teamMembers || [], phases:next.curriculum.phases };
+  next.project.name = next.project.name || next.title || next.curriculum.title || 'Mountain Scope';
+  next.project.description = next.project.description || next.subtitle || '';
+  next.teamMembers = normaliseTeamMembers(next.teamMembers || next.project.teamMembers);
+  next.project.teamMembers = next.teamMembers;
+  next.project.phases = next.curriculum.phases;
+  next.title = next.project.name;
   next.phases = next.curriculum.phases.map(p=>({ id:p.id, name:p.name, topics:phaseTopics(p), documents:[] }));
-  next.teamMembers = normaliseTeamMembers(next.teamMembers);
   next.progress = calculateProgress(next);
-  ensureProjects(next);
-  applyActiveProject(next);
-  return next;
-}
-
-function ensureProjects(next){
-  if(!Array.isArray(next.projects) || !next.projects.length){
-    const project = projectFromRoot(next);
-    next.projects = [project];
-    next.activeProjectId = project.id;
-  }
-  if(!next.activeProjectId || !next.projects.some(project=>project.id===next.activeProjectId)){
-    next.activeProjectId = next.projects[0].id;
-  }
-}
-
-function activeProject(){ return state.projects.find(project=>project.id===state.activeProjectId) || state.projects[0]; }
-function activeProjectId(){ return state.activeProjectId || activeProject()?.id; }
-function captureActiveProject(){
-  const project = activeProject();
-  if(!project) return;
-  project.title = state.curriculum?.title || state.title || project.title;
-  project.subtitle = state.subtitle || project.subtitle || '';
-  project.teamMembers = normaliseTeamMembers(state.teamMembers);
-  project.curriculum = state.curriculum;
-  project.phases = state.phases;
-  project.progress = state.progress;
-}
-function applyActiveProject(next=state){
-  const project = next.projects.find(item=>item.id===next.activeProjectId) || next.projects[0];
-  if(!project) return;
-  project.curriculum.phases.forEach(phase=>{
-    if(!phase.projects) phase.projects = [];
-    if(!Array.isArray(phase.assignedMemberIds)) phase.assignedMemberIds = [];
-    phase.topics = (phase.topics||[]).map(enrichTopic);
-    phase.projects.forEach(projectItem=>{ projectItem.topics = (projectItem.topics||[]).map(enrichTopic); });
-  });
-  next.title = project.title;
-  next.subtitle = project.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.';
-  next.teamMembers = normaliseTeamMembers(project.teamMembers);
-  next.curriculum = project.curriculum;
-  next.phases = next.curriculum.phases.map(phase=>({ id:phase.id, name:phase.name, description:phase.description||'', assignedMemberIds:phase.assignedMemberIds||[], topics:phaseTopics(phase), documents:[] }));
-  next.progress = calculateProgress(next);
-}
-
-function syncRootIntoActiveProject(next){
-  if(!Array.isArray(next.projects) || !next.activeProjectId) return next;
-  const project = next.projects.find(item=>item.id===next.activeProjectId);
-  if(!project) return next;
-  project.title = next.curriculum?.title || next.title || project.title;
-  project.subtitle = next.subtitle || project.subtitle || '';
-  project.teamMembers = normaliseTeamMembers(next.teamMembers);
-  project.curriculum = next.curriculum;
-  project.phases = next.phases;
-  project.progress = next.progress;
+  delete next.projects;
+  delete next.activeProjectId;
   return next;
 }
 
@@ -771,7 +691,7 @@ function normaliseStatus(status){
   return TOPIC_STATES.includes(status) ? status : 'not_verified';
 }
 
-function phaseTopics(phase){ return [...(phase.topics||[]), ...(phase.projects||[]).flatMap(p=>p.topics||[])]; }
+function phaseTopics(phase){ return [...(phase.topics||[])]; }
 function allTopics(){ return (state?.curriculum?.phases||[]).flatMap(phaseTopics); }
 function selectedTopic(){ return allTopics().find(t=>t.id===selectedTopicId) || null; }
 function selectedPhase(){
@@ -804,12 +724,15 @@ function calculateProgress(next){
   };
 }
 
-async function persist(options={}){
+async function persist(){
   state.progress = calculateProgress(state);
-  captureActiveProject();
+  state.project = state.project || { id:uid(), name:state.title || 'Mountain Scope', description:'', teamMembers:[], phases:[] };
+  state.project.name = state.title || state.project.name || 'Mountain Scope';
+  state.project.teamMembers = normaliseTeamMembers(state.teamMembers);
+  state.project.phases = state.curriculum?.phases || [];
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
   try{
-    const response = await apiRequest(API_URL, { method:'PUT', body:JSON.stringify({workflow:state, allowProjectDeletion:Boolean(options.allowProjectDeletion)}) });
+    const response = await apiRequest(API_URL, { method:'PUT', body:JSON.stringify({workflow:state}) });
     await readApiJson(response, 'Online save failed');
   }catch(error){
     showToast(`${error.message} Local backup kept.`);
@@ -820,8 +743,7 @@ function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(persist,3
 const ProjectStructureManager = {
   async apply(response, actionName){
     const payload = await readApiJson(response, actionName);
-    state = migrate(syncRootIntoActiveProject(payload.workflow || state));
-    captureActiveProject();
+    state = migrate(payload.workflow || payload.project || state);
     if(!selectedTopic() && allTopics().length) selectedTopicId = allTopics()[0].id;
     if(!selectedPhase()) selectedPhaseId = (state.curriculum?.phases||[])[0]?.id || null;
     if(!allTopics().length) selectedTopicId = null;
@@ -829,67 +751,6 @@ const ProjectStructureManager = {
     render();
     persist();
     return payload;
-  }
-};
-
-const ProjectSelector = {
-  render(){
-    const current = activeProject();
-    document.getElementById('projectButton').textContent = `▾ ${current?.title || 'Mountain Scope'}`;
-    const menu = document.getElementById('projectMenu');
-    menu.innerHTML = `
-      <div class="small" style="padding:6px 10px">Projects</div>
-      ${state.projects.map(project=>`<button class="project-option ${project.id===state.activeProjectId?'active':''}" data-project-id="${project.id}">${project.id===state.activeProjectId?'✓ ':''}${escapeHtml(project.title)}</button>`).join('')}
-      <button class="project-option" data-action="create-project">- Create Project</button>
-      <button class="project-option danger-option" data-action="delete-project">Delete Current Project</button>
-    `;
-    menu.querySelectorAll('[data-project-id]').forEach(btn=>btn.addEventListener('click',()=>this.switch(btn.dataset.projectId)));
-    menu.querySelector('[data-action="create-project"]').addEventListener('click',()=>this.create());
-    menu.querySelector('[data-action="delete-project"]').addEventListener('click',()=>this.removeCurrent());
-  },
-  toggle(){ document.getElementById('projectMenu').classList.toggle('open'); },
-  switch(projectId){
-    if(projectId === state.activeProjectId) return document.getElementById('projectMenu').classList.remove('open');
-    captureActiveProject();
-    state.activeProjectId = projectId;
-    applyActiveProject();
-    selectedTopicId = allTopics()[0]?.id || null;
-    selectedPhaseId = selectedTopicId ? phaseForTopic(selectedTopicId)?.id : (state.curriculum?.phases||[])[0]?.id || null;
-    document.getElementById('projectMenu').classList.remove('open');
-    persist({ allowProjectDeletion:true });
-    render();
-  },
-  create(){
-    const title = prompt('Project name:');
-    if(title === null) return;
-    const clean = title.trim();
-    if(!clean){ showToast('Project name is required.'); return; }
-    if(state.projects.some(project=>project.title.trim().toLowerCase()===clean.toLowerCase())){ showToast('A project with this name already exists.'); return; }
-    captureActiveProject();
-    const project = blankProject(clean);
-    state.projects.push(project);
-    state.activeProjectId = project.id;
-    applyActiveProject();
-    selectedTopicId = null;
-    selectedPhaseId = null;
-    document.getElementById('projectMenu').classList.remove('open');
-    persist();
-    render();
-  },
-  removeCurrent(){
-    const project = activeProject();
-    if(!project) return;
-    if(state.projects.length <= 1){ showToast('You need at least one project.'); return; }
-    if(!confirm(`Delete project "${project.title}"?\n\nThis removes the project from the dashboard but does not change any other projects.`)) return;
-    state.projects = state.projects.filter(item=>item.id!==project.id);
-    state.activeProjectId = state.projects[0].id;
-    applyActiveProject();
-    selectedTeamMemberId = null;
-    selectedTopicId = allTopics()[0]?.id || null;
-    selectedPhaseId = selectedTopicId ? phaseForTopic(selectedTopicId)?.id : (state.curriculum?.phases||[])[0]?.id || null;
-    document.getElementById('projectMenu').classList.remove('open');
-    persist();
-    render();
   }
 };
 
@@ -944,7 +805,6 @@ function addTeamMember(){
   if(!name){ showToast('Team member name is required.'); return; }
   if(teamMembers().some(member=>member.name.trim().toLowerCase()===name.toLowerCase())){ showToast('A team member with this name already exists.'); return; }
   state.teamMembers = [...teamMembers(), { id:`member-${uid()}`, name, color }];
-  captureActiveProject();
   closeTeamModal();
   persist();
   render();
@@ -960,7 +820,6 @@ function removeTeamMember(memberId){
     phaseTopics(phase).forEach(topic=>{ topic.assignedMemberIds = memberIdsFor(topic).filter(id=>id!==memberId); });
   });
   if(selectedTeamMemberId === memberId) selectedTeamMemberId = null;
-  captureActiveProject();
   persist();
   render();
 }
@@ -1000,7 +859,6 @@ function closeAssignmentMenu(){ document.getElementById('assignmentMenu').classL
 function toggleAssignment(item, memberId){
   const ids = memberIdsFor(item);
   item.assignedMemberIds = ids.includes(memberId) ? ids.filter(id=>id!==memberId) : [...ids, memberId];
-  captureActiveProject();
   persist();
   render();
 }
@@ -1018,7 +876,7 @@ const PhaseService = {
     try{
       const clean = this.validateName(name);
       const description = prompt('Description (optional):') || '';
-      const response = await apiRequest('/api/phases', { method:'POST', body:JSON.stringify({projectId:activeProjectId(), name:clean, description}) });
+      const response = await apiRequest('/api/phases', { method:'POST', body:JSON.stringify({name:clean, description}) });
       await ProjectStructureManager.apply(response, 'Add phase failed');
     }catch(error){ showToast(error.message); }
   },
@@ -1027,20 +885,20 @@ const PhaseService = {
     if(name === null) return;
     try{
       const clean = this.validateName(name, phase.id);
-      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'PATCH', body:JSON.stringify({projectId:activeProjectId(), name:clean}) });
+      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'PATCH', body:JSON.stringify({name:clean}) });
       await ProjectStructureManager.apply(response, 'Rename phase failed');
     }catch(error){ showToast(error.message); }
   },
   async remove(phase){
     if(!confirm(`Delete phase "${phase.name}"?\n\nThis will also delete every topic inside this phase.`)) return;
     try{
-      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'DELETE', body:JSON.stringify({projectId:activeProjectId()}) });
+      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'DELETE' });
       await ProjectStructureManager.apply(response, 'Delete phase failed');
     }catch(error){ showToast(error.message); }
   },
   async move(phase, direction){
     try{
-      const response = await apiRequest(`/api/phases/${phase.id}/move`, { method:'POST', body:JSON.stringify({projectId:activeProjectId(), direction}) });
+      const response = await apiRequest(`/api/phases/${phase.id}/move`, { method:'POST', body:JSON.stringify({direction}) });
       await ProjectStructureManager.apply(response, 'Move phase failed');
     }catch(error){ showToast(error.message); }
   }
@@ -1059,7 +917,7 @@ const TopicService = {
     try{
       const clean = this.validateName(phase, name);
       const description = prompt('Description (optional):') || '';
-      const response = await apiRequest('/api/topics', { method:'POST', body:JSON.stringify({projectId:activeProjectId(), phase_id:phase.id, name:clean, description}) });
+      const response = await apiRequest('/api/topics', { method:'POST', body:JSON.stringify({phaseId:phase.id, name:clean, description}) });
       const payload = await ProjectStructureManager.apply(response, 'Add topic failed');
       selectedTopicId = payload.topic?.id || selectedTopicId;
       render();
@@ -1070,20 +928,20 @@ const TopicService = {
     if(name === null) return;
     try{
       const clean = this.validateName(phase, name, topic.id);
-      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'PATCH', body:JSON.stringify({projectId:activeProjectId(), name:clean}) });
+      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'PATCH', body:JSON.stringify({name:clean}) });
       await ProjectStructureManager.apply(response, 'Rename topic failed');
     }catch(error){ showToast(error.message); }
   },
   async remove(topic){
     if(!confirm(`Delete topic "${topic.name}"?`)) return;
     try{
-      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'DELETE', body:JSON.stringify({projectId:activeProjectId()}) });
+      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'DELETE' });
       await ProjectStructureManager.apply(response, 'Delete topic failed');
     }catch(error){ showToast(error.message); }
   },
   async move(topic, direction){
     try{
-      const response = await apiRequest(`/api/topics/${topic.id}/move`, { method:'POST', body:JSON.stringify({projectId:activeProjectId(), direction}) });
+      const response = await apiRequest(`/api/topics/${topic.id}/move`, { method:'POST', body:JSON.stringify({direction}) });
       await ProjectStructureManager.apply(response, 'Move topic failed');
     }catch(error){ showToast(error.message); }
   }
@@ -1091,8 +949,7 @@ const TopicService = {
 
 function render(){
   state.progress = calculateProgress(state);
-  captureActiveProject();
-  ProjectSelector.render();
+  document.getElementById('projectTitle').textContent = state.project?.name || state.title || 'Mountain Scope';
   TeamSelector.render();
   ensureVisibleSelection();
   document.getElementById('subtitle').textContent = state.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.';
@@ -1258,7 +1115,6 @@ function toggleTopicCompleted(topic){
   topic.manualOverride = completed ? { completed:true, reason:'Manually marked complete from dashboard.', updatedAt:now() } : null;
   topic.completion = completed ? 100 : undefined;
   state.progress = calculateProgress(state);
-  captureActiveProject();
   persist();
   render();
 }
@@ -1344,7 +1200,7 @@ function renderChat(body, topic){
     const question = document.getElementById('chatQuestion').value.trim();
     if(!question) return;
     try{
-      const response = await apiRequest(`/api/topics/${topic.id}/mentor`, { method:'POST', body:JSON.stringify({projectId:activeProjectId(), question}) });
+      const response = await apiRequest(`/api/topics/${topic.id}/mentor`, { method:'POST', body:JSON.stringify({question}) });
       const payload = await readApiJson(response, 'Mentor request failed');
       Object.assign(topic, payload.topic);
       localStorage.setItem(STATE_KEY, JSON.stringify(state));
@@ -1369,14 +1225,12 @@ function escapeAttr(value){ return escapeHtml(value).replace(/"/g,'&quot;'); }
 function showToast(message){ const toast=document.getElementById('toast'); toast.textContent=message; toast.style.display='block'; setTimeout(()=>toast.style.display='none',3600); }
 
 document.getElementById('saveBtn').addEventListener('click',()=>persist().then(()=>showToast('Saved.')));
-document.getElementById('projectButton').addEventListener('click',()=>ProjectSelector.toggle());
 document.getElementById('teamButton').addEventListener('click',()=>TeamSelector.toggle());
 document.getElementById('teamCancelBtn').addEventListener('click',closeTeamModal);
 document.getElementById('teamAddBtn').addEventListener('click',addTeamMember);
 document.getElementById('teamNameInput').addEventListener('keydown',event=>{ if(event.key === 'Enter') addTeamMember(); });
 document.getElementById('teamModal').addEventListener('click',event=>{ if(event.target.id === 'teamModal') closeTeamModal(); });
 document.addEventListener('click',event=>{
-  if(!event.target.closest('.project-selector')) document.getElementById('projectMenu').classList.remove('open');
   if(!event.target.closest('.team-selector')) TeamSelector.close();
   if(!event.target.closest('.assignment-menu') && !event.target.closest('.assignment-trigger')) closeAssignmentMenu();
 });
