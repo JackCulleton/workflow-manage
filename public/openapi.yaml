@@ -321,7 +321,7 @@ paths:
     post:
       operationId: assignMemberToPhase
       summary: Assign an existing team member to an existing phase.
-      description: Assigns an existing team member to an existing phase in the dashboard's single workflow. It stores the stable member ID, prevents duplicate assignments, and does not change progress or completion status.
+      description: Assigns an existing team member to an existing phase in the dashboard's single workflow. Prefer phaseId and memberId when known, but phaseName and memberName are supported for GPT delegation. Names must match exactly enough to be unambiguous. The stored assignment always uses the stable member ID and does not change progress or completion status.
       requestBody:
         required: true
         content:
@@ -334,7 +334,7 @@ paths:
     post:
       operationId: unassignMemberFromPhase
       summary: Remove an existing team member assignment from an existing phase.
-      description: Removes an existing team member from an existing phase assignment in the dashboard's single workflow. It does not change progress, completion status, topics, or phase content.
+      description: Removes an existing team member from an existing phase assignment in the dashboard's single workflow. Prefer phaseId and memberId when known, but phaseName and memberName are supported when unambiguous. It does not change progress, completion status, topics, or phase content.
       requestBody:
         required: true
         content:
@@ -347,7 +347,7 @@ paths:
     post:
       operationId: assignMemberToTopic
       summary: Assign an existing team member to an existing topic.
-      description: Assigns an existing team member to an existing topic in the dashboard's single workflow. It stores the stable member ID, prevents duplicate assignments, and does not change progress or completion status.
+      description: Assigns an existing team member to an existing topic in the dashboard's single workflow. Prefer topicId and memberId when known, but topicName and memberName are supported for GPT delegation. If topicName is ambiguous, include phaseId or phaseName. The stored assignment always uses the stable member ID and does not change progress or completion status.
       requestBody:
         required: true
         content:
@@ -360,7 +360,7 @@ paths:
     post:
       operationId: unassignMemberFromTopic
       summary: Remove an existing team member assignment from an existing topic.
-      description: Removes an existing team member from an existing topic assignment in the dashboard's single workflow. It does not change progress, completion status, phases, or topic content.
+      description: Removes an existing team member from an existing topic assignment in the dashboard's single workflow. Prefer topicId and memberId when known, but topicName and memberName are supported when unambiguous. It does not change progress, completion status, phases, or topic content.
       requestBody:
         required: true
         content:
@@ -373,7 +373,7 @@ paths:
     post:
       operationId: setAssignments
       summary: Atomically replace assignments on existing phases or topics.
-      description: Sets team-member assignments for existing phases or topics in the dashboard's single workflow. All members and targets are validated before any write; invalid input fails without partial updates.
+      description: Sets team-member assignments for existing phases or topics in the dashboard's single workflow. Prefer IDs when known, but memberNames plus targetName are supported when unambiguous. All members and targets are validated before any write; invalid input fails without partial updates.
       requestBody:
         required: true
         content:
@@ -419,25 +419,64 @@ components:
         color: { type: string }
     PhaseAssignmentRequest:
       type: object
-      required: [phaseId, memberId]
+      allOf:
+        - anyOf:
+            - required: [phaseId]
+            - required: [phaseName]
+        - anyOf:
+            - required: [memberId]
+            - required: [memberName]
       properties:
         phaseId: { type: string }
+        phaseName: { type: string }
         memberId: { type: string }
+        memberName: { type: string }
     TopicAssignmentRequest:
       type: object
-      required: [topicId, memberId]
+      allOf:
+        - anyOf:
+            - required: [topicId]
+            - required: [topicName]
+        - anyOf:
+            - required: [memberId]
+            - required: [memberName]
       properties:
         topicId: { type: string }
+        topicName: { type: string }
+        phaseId:
+          type: string
+          description: Optional disambiguation when topicName is not unique.
+        phaseName:
+          type: string
+          description: Optional disambiguation when topicName is not unique.
         memberId: { type: string }
+        memberName: { type: string }
     AssignmentSetItem:
       type: object
-      required: [targetType, targetId, memberIds]
+      required: [targetType]
+      allOf:
+        - anyOf:
+            - required: [targetId]
+            - required: [targetName]
+        - anyOf:
+            - required: [memberIds]
+            - required: [memberNames]
       properties:
         targetType:
           type: string
           enum: [phase, topic]
         targetId: { type: string }
+        targetName: { type: string }
+        phaseId:
+          type: string
+          description: Optional disambiguation when targetType is topic and targetName is not unique.
+        phaseName:
+          type: string
+          description: Optional disambiguation when targetType is topic and targetName is not unique.
         memberIds:
+          type: array
+          items: { type: string }
+        memberNames:
           type: array
           items: { type: string }
     Topic:

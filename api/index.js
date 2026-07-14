@@ -369,25 +369,25 @@ export default async function handler(req, res) {
       return send(res, 200, { success: true, projectId: state.project.id, topicId: topicMoveMatch[1], persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/phases/assign') {
-      const result = assignMemberToPhase(state, req.body && req.body.phaseId, req.body && req.body.memberId);
+      const result = assignMemberToPhase(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { success: true, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/phases/unassign') {
-      const result = unassignMemberFromPhase(state, req.body && req.body.phaseId, req.body && req.body.memberId);
+      const result = unassignMemberFromPhase(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { success: true, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/topics/assign') {
-      const result = assignMemberToTopic(state, req.body && req.body.topicId, req.body && req.body.memberId);
+      const result = assignMemberToTopic(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { success: true, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/topics/unassign') {
-      const result = unassignMemberFromTopic(state, req.body && req.body.topicId, req.body && req.body.memberId);
+      const result = unassignMemberFromTopic(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { success: true, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });

@@ -242,6 +242,52 @@ test('assignMemberToTopic supports multiple members and prevents duplicates', as
   assert.deepEqual(duplicate.body.assignedMembers.map((member) => member.name), ['Ada', 'Grace']);
 });
 
+test('assignment actions can resolve existing members and targets by name', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  const phaseResponse = await callApi('POST', '/api/assignments/phases/assign', {
+    phaseName: 'Scope and setup',
+    memberName: 'Ada'
+  }, stateRef);
+  const topicResponse = await callApi('POST', '/api/assignments/topics/assign', {
+    phaseName: 'Parsing',
+    topicName: 'Quotes',
+    memberName: 'Grace'
+  }, stateRef);
+
+  assert.equal(phaseResponse.statusCode, 200);
+  assert.deepEqual(phaseResponse.body.phase.assignedMemberIds, ['member-1']);
+  assert.equal(topicResponse.statusCode, 200);
+  assert.deepEqual(topicResponse.body.topic.assignedMemberIds, ['member-2']);
+
+  const reload = await callApi('GET', '/api/workflow', null, stateRef);
+  assert.deepEqual(reload.body.workflow.curriculum.phases.find((item) => item.name === 'Scope and setup').assignedMemberIds, ['member-1']);
+  assert.deepEqual(
+    reload.body.workflow.curriculum.phases.find((item) => item.name === 'Parsing').topics.find((item) => item.name === 'Quotes').assignedMemberIds,
+    ['member-2']
+  );
+});
+
+test('name-based assignment rejects ambiguous members or topics instead of guessing', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  stateRef.current.projects[1].teamMembers.push({ id: 'member-3', name: 'Ada', color: '#22c55e' });
+  stateRef.current.projects[1].curriculum.phases[0].topics.push(topic('mini-topic-4', 'Quotes'));
+  stateRef.current.projects[1].phases[0].topics.push(topic('mini-topic-4', 'Quotes'));
+
+  const ambiguousMember = await callApi('POST', '/api/assignments/phases/assign', {
+    phaseName: 'Scope and setup',
+    memberName: 'Ada'
+  }, stateRef);
+  assert.equal(ambiguousMember.statusCode, 400);
+  assert.match(ambiguousMember.body.error, /Team member name is ambiguous/);
+
+  const ambiguousTopic = await callApi('POST', '/api/assignments/topics/assign', {
+    topicName: 'Quotes',
+    memberName: 'Grace'
+  }, stateRef);
+  assert.equal(ambiguousTopic.statusCode, 400);
+  assert.match(ambiguousTopic.body.error, /Topic name is ambiguous/);
+});
+
 test('unassigning a member does not delete workflow content', async () => {
   const stateRef = { current: legacyWorkflowState() };
   await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-2', memberId: 'member-1' }, stateRef);
@@ -331,6 +377,20 @@ test('setAssignments is atomic and validates all targets before writing', async 
   assert.equal(valid.body.assignments.length, 2);
   assert.deepEqual(valid.body.assignments[0].target.assignedMemberIds, ['member-1']);
   assert.deepEqual(valid.body.assignments[1].target.assignedMemberIds, ['member-2']);
+});
+
+test('setAssignments can use member names and target names', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  const response = await callApi('POST', '/api/assignments/batch', {
+    assignments: [
+      { targetType: 'phase', targetName: 'Scope and setup', memberNames: ['Ada'] },
+      { targetType: 'topic', targetName: 'Quotes', phaseName: 'Parsing', memberNames: ['Grace'] }
+    ]
+  }, stateRef);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.assignments[0].target.assignedMemberIds, ['member-1']);
+  assert.deepEqual(response.body.assignments[1].target.assignedMemberIds, ['member-2']);
 });
 
 test('existing workflows without assignment arrays still load with empty arrays', async () => {
