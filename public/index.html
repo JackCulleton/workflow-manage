@@ -57,7 +57,7 @@ h1{font-size:28px;font-weight:800;line-height:1.15}
 .btn:hover{border-color:var(--orange);color:var(--orange)}
 .btn.primary{background:var(--orange-soft);border-color:var(--orange);color:var(--orange)}
 .btn.danger:hover{border-color:var(--red);color:var(--red)}
-.grid{display:grid;grid-template-columns:330px minmax(0,1fr);gap:18px;align-items:start}
+.grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start}
 .panel{
   background:var(--panel);
   border:1px solid var(--border);
@@ -76,19 +76,68 @@ h1{font-size:28px;font-weight:800;line-height:1.15}
 .bar{height:8px;border-radius:999px;background:var(--panel-3);overflow:hidden;margin-top:10px}
 .fill{height:100%;background:var(--orange);width:0}
 .section-title{font-size:13px;font-weight:800;margin:18px 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
-.phase{
+.project-selector{position:relative;display:inline-block}
+.project-button{
+  border:none;
+  background:transparent;
+  color:var(--text);
+  font-size:28px;
+  font-weight:800;
+  line-height:1.15;
+  cursor:pointer;
+  padding:0;
+  text-align:left;
+}
+.project-menu{
+  position:absolute;
+  left:0;
+  top:calc(100% + 10px);
+  min-width:220px;
+  background:var(--panel-2);
   border:1px solid var(--border);
   border-radius:8px;
-  margin-bottom:10px;
-  overflow:hidden;
+  padding:8px;
+  z-index:10;
+  display:none;
+  box-shadow:0 18px 40px rgba(0,0,0,.35);
 }
+.project-menu.open{display:block}
+.project-option{
+  width:100%;
+  border:none;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  padding:9px 10px;
+  border-radius:7px;
+  cursor:pointer;
+  font-weight:700;
+}
+.project-option:hover{background:var(--panel-3)}
+.project-option.active{color:var(--orange)}
+.roadmap-shell{margin-top:8px}
+.phase-rail{
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  padding:4px 0 12px;
+  border-bottom:1px solid var(--border);
+}
+.phase{
+  min-width:190px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  overflow:hidden;
+  background:var(--panel-2);
+}
+.phase.active{border-color:var(--orange);box-shadow:0 0 0 1px rgba(245,137,58,.25)}
 .phase-head{
   padding:12px;
-  background:var(--panel-2);
+  background:transparent;
   display:flex;
-  justify-content:space-between;
+  flex-direction:column;
   gap:10px;
-  align-items:center;
+  align-items:stretch;
 }
 .phase-actions,.topic-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .icon-btn{
@@ -105,7 +154,9 @@ h1{font-size:28px;font-weight:800;line-height:1.15}
 .icon-btn:hover{border-color:var(--orange);color:var(--orange)}
 .phase-name{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .phase-progress{font-size:12px;color:var(--orange);font-weight:800}
-.topic-list{padding:8px}
+.topic-list{padding-top:12px}
+.topic-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.topic-list-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
 .topic{
   width:100%;
   border:1px solid transparent;
@@ -228,11 +279,14 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 .empty{color:var(--faint);font-size:13px;line-height:1.7;text-align:center;padding:34px 10px}
 .small{font-size:12px;color:var(--faint);line-height:1.5}
 .add-row{width:100%;margin-top:8px}
+.phase-add{min-width:150px;align-self:stretch}
 @media (max-width:900px){
   body{padding:18px}
   header,.workspace-head{flex-direction:column}
-  .grid,.two-col,.field-row{grid-template-columns:1fr}
+  .two-col,.field-row{grid-template-columns:1fr}
   .actions{justify-content:flex-start}
+  .project-button{font-size:24px}
+  .phase{min-width:165px}
 }
 </style>
 </head>
@@ -240,7 +294,10 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 <div class="wrap">
   <header>
     <div>
-      <h1 id="title">Mountain Scope</h1>
+      <div class="project-selector">
+        <button class="project-button" id="projectButton">▾ Mountain Scope</button>
+        <div class="project-menu" id="projectMenu"></div>
+      </div>
       <div class="subtitle" id="subtitle">Curriculum-driven learning roadmap with evidence-based progress.</div>
     </div>
     <div class="actions">
@@ -289,6 +346,7 @@ const TOPIC_STATES = ['complete','partial','not_verified','missing'];
 
 let state = null;
 let selectedTopicId = null;
+let selectedPhaseId = null;
 let activeTab = 'overview';
 let saveTimer = null;
 
@@ -319,6 +377,22 @@ function defaultState(){
   };
 }
 
+function projectFromRoot(input){
+  return {
+    id:input.activeProjectId || uid(),
+    title:input.curriculum?.title || input.title || 'Mountain Scope',
+    subtitle:input.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.',
+    curriculum:input.curriculum,
+    phases:input.phases || [],
+    progress:input.progress || null
+  };
+}
+
+function blankProject(title){
+  const curriculum = { id:uid(), title, source:{name:'Manual project',type:'manual',importedAt:now()}, phases:[], glossary:[], resources:[], versionHistory:[] };
+  return { id:uid(), title, subtitle:'Curriculum-driven learning roadmap with evidence-based progress.', curriculum, phases:[], progress:null };
+}
+
 function apiRequest(url, options={}){
   return fetch(url, {
     ...options,
@@ -337,6 +411,7 @@ async function loadState(){
     showToast('Offline mode. Changes are kept locally.');
   }
   selectedTopicId = allTopics()[0]?.id || null;
+  selectedPhaseId = selectedTopicId ? phaseForTopic(selectedTopicId)?.id : (state.curriculum?.phases||[])[0]?.id || null;
   render();
 }
 
@@ -362,6 +437,56 @@ function migrate(input){
   });
   next.phases = next.curriculum.phases.map(p=>({ id:p.id, name:p.name, topics:phaseTopics(p), documents:[] }));
   next.progress = calculateProgress(next);
+  ensureProjects(next);
+  applyActiveProject(next);
+  return next;
+}
+
+function ensureProjects(next){
+  if(!Array.isArray(next.projects) || !next.projects.length){
+    const project = projectFromRoot(next);
+    next.projects = [project];
+    next.activeProjectId = project.id;
+  }
+  if(!next.activeProjectId || !next.projects.some(project=>project.id===next.activeProjectId)){
+    next.activeProjectId = next.projects[0].id;
+  }
+}
+
+function activeProject(){ return state.projects.find(project=>project.id===state.activeProjectId) || state.projects[0]; }
+function captureActiveProject(){
+  const project = activeProject();
+  if(!project) return;
+  project.title = state.curriculum?.title || state.title || project.title;
+  project.subtitle = state.subtitle || project.subtitle || '';
+  project.curriculum = state.curriculum;
+  project.phases = state.phases;
+  project.progress = state.progress;
+}
+function applyActiveProject(next=state){
+  const project = next.projects.find(item=>item.id===next.activeProjectId) || next.projects[0];
+  if(!project) return;
+  project.curriculum.phases.forEach(phase=>{
+    if(!phase.projects) phase.projects = [];
+    phase.topics = (phase.topics||[]).map(enrichTopic);
+    phase.projects.forEach(projectItem=>{ projectItem.topics = (projectItem.topics||[]).map(enrichTopic); });
+  });
+  next.title = project.title;
+  next.subtitle = project.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.';
+  next.curriculum = project.curriculum;
+  next.phases = next.curriculum.phases.map(phase=>({ id:phase.id, name:phase.name, description:phase.description||'', topics:phaseTopics(phase), documents:[] }));
+  next.progress = calculateProgress(next);
+}
+
+function syncRootIntoActiveProject(next){
+  if(!Array.isArray(next.projects) || !next.activeProjectId) return next;
+  const project = next.projects.find(item=>item.id===next.activeProjectId);
+  if(!project) return next;
+  project.title = next.curriculum?.title || next.title || project.title;
+  project.subtitle = next.subtitle || project.subtitle || '';
+  project.curriculum = next.curriculum;
+  project.phases = next.phases;
+  project.progress = next.progress;
   return next;
 }
 
@@ -385,6 +510,8 @@ function normaliseStatus(status){
 function phaseTopics(phase){ return [...(phase.topics||[]), ...(phase.projects||[]).flatMap(p=>p.topics||[])]; }
 function allTopics(){ return (state?.curriculum?.phases||[]).flatMap(phaseTopics); }
 function selectedTopic(){ return allTopics().find(t=>t.id===selectedTopicId) || null; }
+function selectedPhase(){ return (state?.curriculum?.phases||[]).find(phase=>phase.id===selectedPhaseId) || (selectedTopicId && phaseForTopic(selectedTopicId)) || (state?.curriculum?.phases||[])[0] || null; }
+function phaseForTopic(topicId){ return (state?.curriculum?.phases||[]).find(phase=>phaseTopics(phase).some(topic=>topic.id===topicId)) || null; }
 function topicCompletion(topic){
   if(topic.manualOverride?.completed) return 100;
   if(typeof topic.completion === 'number') return Math.max(0, Math.min(100, topic.completion));
@@ -412,6 +539,7 @@ function calculateProgress(next){
 
 async function persist(){
   state.progress = calculateProgress(state);
+  captureActiveProject();
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
   try{
     const response = await apiRequest(API_URL, { method:'PUT', body:JSON.stringify({workflow:state}) });
@@ -425,12 +553,59 @@ function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(persist,3
 const ProjectStructureManager = {
   async apply(response, actionName){
     const payload = await readApiJson(response, actionName);
-    state = migrate(payload.workflow || state);
+    state = migrate(syncRootIntoActiveProject(payload.workflow || state));
+    captureActiveProject();
     if(!selectedTopic() && allTopics().length) selectedTopicId = allTopics()[0].id;
+    if(!selectedPhase()) selectedPhaseId = (state.curriculum?.phases||[])[0]?.id || null;
     if(!allTopics().length) selectedTopicId = null;
     localStorage.setItem(STATE_KEY, JSON.stringify(state));
     render();
+    persist();
     return payload;
+  }
+};
+
+const ProjectSelector = {
+  render(){
+    const current = activeProject();
+    document.getElementById('projectButton').textContent = `▾ ${current?.title || 'Mountain Scope'}`;
+    const menu = document.getElementById('projectMenu');
+    menu.innerHTML = `
+      <div class="small" style="padding:6px 10px">Projects</div>
+      ${state.projects.map(project=>`<button class="project-option ${project.id===state.activeProjectId?'active':''}" data-project-id="${project.id}">${project.id===state.activeProjectId?'✓ ':''}${escapeHtml(project.title)}</button>`).join('')}
+      <button class="project-option" data-action="create-project">- Create Project</button>
+    `;
+    menu.querySelectorAll('[data-project-id]').forEach(btn=>btn.addEventListener('click',()=>this.switch(btn.dataset.projectId)));
+    menu.querySelector('[data-action="create-project"]').addEventListener('click',()=>this.create());
+  },
+  toggle(){ document.getElementById('projectMenu').classList.toggle('open'); },
+  switch(projectId){
+    if(projectId === state.activeProjectId) return document.getElementById('projectMenu').classList.remove('open');
+    captureActiveProject();
+    state.activeProjectId = projectId;
+    applyActiveProject();
+    selectedTopicId = allTopics()[0]?.id || null;
+    selectedPhaseId = selectedTopicId ? phaseForTopic(selectedTopicId)?.id : (state.curriculum?.phases||[])[0]?.id || null;
+    document.getElementById('projectMenu').classList.remove('open');
+    persist();
+    render();
+  },
+  create(){
+    const title = prompt('Project name:');
+    if(title === null) return;
+    const clean = title.trim();
+    if(!clean){ showToast('Project name is required.'); return; }
+    if(state.projects.some(project=>project.title.trim().toLowerCase()===clean.toLowerCase())){ showToast('A project with this name already exists.'); return; }
+    captureActiveProject();
+    const project = blankProject(clean);
+    state.projects.push(project);
+    state.activeProjectId = project.id;
+    applyActiveProject();
+    selectedTopicId = null;
+    selectedPhaseId = null;
+    document.getElementById('projectMenu').classList.remove('open');
+    persist();
+    render();
   }
 };
 
@@ -520,7 +695,8 @@ const TopicService = {
 
 function render(){
   state.progress = calculateProgress(state);
-  document.getElementById('title').textContent = state.curriculum?.title || state.title || 'Mountain Scope';
+  captureActiveProject();
+  ProjectSelector.render();
   document.getElementById('subtitle').textContent = state.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.';
   document.getElementById('overall').textContent = `${state.progress.overall}%`;
   document.getElementById('overallFill').style.width = `${state.progress.overall}%`;
@@ -533,29 +709,45 @@ function render(){
 
 function renderRoadmap(){
   const root = document.getElementById('roadmap');
-  root.innerHTML = '';
-  (state.curriculum?.phases||[]).forEach(phase=>{
+  const phases = state.curriculum?.phases || [];
+  const currentPhase = selectedPhase();
+  root.innerHTML = '<div class="roadmap-shell"><div class="phase-rail"></div><div class="topic-list"></div></div>';
+  const rail = root.querySelector('.phase-rail');
+  const topicList = root.querySelector('.topic-list');
+  phases.forEach(phase=>{
     const phaseProgress = state.progress.phases.find(p=>p.id===phase.id)?.completion || 0;
     const wrap = document.createElement('div');
-    wrap.className = 'phase';
+    wrap.className = `phase ${phase.id===currentPhase?.id?'active':''}`;
     wrap.innerHTML = `
       <div class="phase-head">
-        <div class="phase-name">${escapeHtml(phase.name)}</div>
+        <button class="topic-select" data-action="select-phase"><span class="phase-name">${escapeHtml(phase.name)}</span><span class="phase-progress">${phaseProgress}%</span></button>
         <div class="phase-actions">
-          <div class="phase-progress">${phaseProgress}%</div>
           <button class="icon-btn" data-action="phase-up" title="Move phase up">↑</button>
           <button class="icon-btn" data-action="phase-down" title="Move phase down">↓</button>
           <button class="icon-btn" data-action="phase-edit" title="Rename phase">✎</button>
           <button class="icon-btn" data-action="phase-delete" title="Delete phase">×</button>
         </div>
       </div>
-      <div class="topic-list"></div>
     `;
+    wrap.querySelector('[data-action="select-phase"]').addEventListener('click',()=>{ selectedPhaseId=phase.id; selectedTopicId=phaseTopics(phase)[0]?.id || null; activeTab='overview'; render(); });
     wrap.querySelector('[data-action="phase-up"]').addEventListener('click',()=>PhaseService.move(phase,'up'));
     wrap.querySelector('[data-action="phase-down"]').addEventListener('click',()=>PhaseService.move(phase,'down'));
     wrap.querySelector('[data-action="phase-edit"]').addEventListener('click',()=>PhaseService.rename(phase));
     wrap.querySelector('[data-action="phase-delete"]').addEventListener('click',()=>PhaseService.remove(phase));
-    const list = wrap.querySelector('.topic-list');
+    rail.appendChild(wrap);
+  });
+  const phase = currentPhase;
+  topicList.innerHTML = `
+    <div class="topic-list-head">
+      <div>
+        <div class="section-title" style="margin:0 0 4px">Topics</div>
+        <div class="small">${phase ? escapeHtml(phase.name) : 'Select or create a phase.'}</div>
+      </div>
+    </div>
+    <div class="topic-list-grid"></div>
+  `;
+  const grid = topicList.querySelector('.topic-list-grid');
+  if(phase){
     phaseTopics(phase).forEach(topic=>{
       const row = document.createElement('div');
       row.className = `topic ${topic.id===selectedTopicId?'active':''}`;
@@ -577,20 +769,19 @@ function renderRoadmap(){
       row.querySelector('[data-action="topic-down"]').addEventListener('click',()=>TopicService.move(topic,'down'));
       row.querySelector('[data-action="topic-edit"]').addEventListener('click',()=>TopicService.rename(phase, topic));
       row.querySelector('[data-action="topic-delete"]').addEventListener('click',()=>TopicService.remove(topic));
-      list.appendChild(row);
+      grid.appendChild(row);
     });
     const addTopic = document.createElement('button');
     addTopic.className = 'btn add-row';
     addTopic.textContent = 'Add Topic';
     addTopic.addEventListener('click',()=>TopicService.add(phase));
-    list.appendChild(addTopic);
-    root.appendChild(wrap);
-  });
+    topicList.appendChild(addTopic);
+  }
   const addPhase = document.createElement('button');
-  addPhase.className = 'btn primary add-row';
+  addPhase.className = 'btn primary phase-add';
   addPhase.textContent = 'Add Phase';
   addPhase.addEventListener('click',()=>PhaseService.add());
-  root.appendChild(addPhase);
+  rail.appendChild(addPhase);
 }
 
 function renderWorkspace(){
@@ -729,6 +920,10 @@ function escapeAttr(value){ return escapeHtml(value).replace(/"/g,'&quot;'); }
 function showToast(message){ const toast=document.getElementById('toast'); toast.textContent=message; toast.style.display='block'; setTimeout(()=>toast.style.display='none',3600); }
 
 document.getElementById('saveBtn').addEventListener('click',()=>persist().then(()=>showToast('Saved.')));
+document.getElementById('projectButton').addEventListener('click',()=>ProjectSelector.toggle());
+document.addEventListener('click',event=>{
+  if(!event.target.closest('.project-selector')) document.getElementById('projectMenu').classList.remove('open');
+});
 
 loadState();
 </script>

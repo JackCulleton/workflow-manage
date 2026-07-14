@@ -402,6 +402,20 @@ components:
       properties:
         title: { type: string }
         subtitle: { type: string }
+        activeProjectId: { type: string }
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              title: { type: string }
+              subtitle: { type: string }
+              curriculum: { $ref: '#/components/schemas/Curriculum' }
+              phases:
+                type: array
+                items: { $ref: '#/components/schemas/Phase' }
+              progress: { $ref: '#/components/schemas/Progress' }
         curriculum: { $ref: '#/components/schemas/Curriculum' }
         phases:
           type: array
