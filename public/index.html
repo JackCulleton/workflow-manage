@@ -89,26 +89,49 @@ h1{font-size:28px;font-weight:800;line-height:1.15}
   justify-content:space-between;
   gap:10px;
   align-items:center;
+}
+.phase-actions,.topic-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.icon-btn{
+  width:28px;
+  height:28px;
+  border:1px solid var(--border);
+  background:var(--panel-3);
+  color:var(--dim);
+  border-radius:7px;
+  font-size:12px;
+  font-weight:800;
   cursor:pointer;
 }
+.icon-btn:hover{border-color:var(--orange);color:var(--orange)}
 .phase-name{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .phase-progress{font-size:12px;color:var(--orange);font-weight:800}
 .topic-list{padding:8px}
 .topic{
   width:100%;
-  text-align:left;
   border:1px solid transparent;
   background:transparent;
   color:var(--text);
-  padding:10px;
+  padding:6px;
   border-radius:7px;
-  cursor:pointer;
   display:grid;
-  grid-template-columns:10px minmax(0,1fr) auto;
+  grid-template-columns:minmax(0,1fr) auto;
   gap:9px;
   align-items:center;
 }
 .topic:hover,.topic.active{background:var(--panel-3);border-color:var(--border)}
+.topic-select{
+  border:none;
+  background:transparent;
+  color:var(--text);
+  display:grid;
+  grid-template-columns:10px minmax(0,1fr) auto;
+  gap:9px;
+  align-items:center;
+  min-width:0;
+  text-align:left;
+  cursor:pointer;
+  padding:4px;
+}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--blue)}
 .dot.complete{background:var(--green)}
 .dot.partial{background:var(--yellow)}
@@ -204,6 +227,7 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 }
 .empty{color:var(--faint);font-size:13px;line-height:1.7;text-align:center;padding:34px 10px}
 .small{font-size:12px;color:var(--faint);line-height:1.5}
+.add-row{width:100%;margin-top:8px}
 @media (max-width:900px){
   body{padding:18px}
   header,.workspace-head{flex-direction:column}
@@ -398,6 +422,102 @@ async function persist(){
 }
 function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(persist,350); }
 
+const ProjectStructureManager = {
+  async apply(response, actionName){
+    const payload = await readApiJson(response, actionName);
+    state = migrate(payload.workflow || state);
+    if(!selectedTopic() && allTopics().length) selectedTopicId = allTopics()[0].id;
+    if(!allTopics().length) selectedTopicId = null;
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+    render();
+    return payload;
+  }
+};
+
+const PhaseService = {
+  validateName(name, phaseId=null){
+    const clean = name.trim();
+    if(!clean) throw new Error('Phase name is required.');
+    if((state.curriculum?.phases||[]).some(phase=>phase.id!==phaseId && phase.name.trim().toLowerCase()===clean.toLowerCase())) throw new Error('A phase with this name already exists.');
+    return clean;
+  },
+  async add(){
+    const name = prompt('Phase name:');
+    if(name === null) return;
+    try{
+      const clean = this.validateName(name);
+      const description = prompt('Description (optional):') || '';
+      const response = await apiRequest('/api/phases', { method:'POST', body:JSON.stringify({name:clean, description}) });
+      await ProjectStructureManager.apply(response, 'Add phase failed');
+    }catch(error){ showToast(error.message); }
+  },
+  async rename(phase){
+    const name = prompt('Phase name:', phase.name || '');
+    if(name === null) return;
+    try{
+      const clean = this.validateName(name, phase.id);
+      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'PATCH', body:JSON.stringify({name:clean}) });
+      await ProjectStructureManager.apply(response, 'Rename phase failed');
+    }catch(error){ showToast(error.message); }
+  },
+  async remove(phase){
+    if(!confirm(`Delete phase "${phase.name}"?\n\nThis will also delete every topic inside this phase.`)) return;
+    try{
+      const response = await apiRequest(`/api/phases/${phase.id}`, { method:'DELETE' });
+      await ProjectStructureManager.apply(response, 'Delete phase failed');
+    }catch(error){ showToast(error.message); }
+  },
+  async move(phase, direction){
+    try{
+      const response = await apiRequest(`/api/phases/${phase.id}/move`, { method:'POST', body:JSON.stringify({direction}) });
+      await ProjectStructureManager.apply(response, 'Move phase failed');
+    }catch(error){ showToast(error.message); }
+  }
+};
+
+const TopicService = {
+  validateName(phase, name, topicId=null){
+    const clean = name.trim();
+    if(!clean) throw new Error('Topic name is required.');
+    if(phaseTopics(phase).some(topic=>topic.id!==topicId && topic.name.trim().toLowerCase()===clean.toLowerCase())) throw new Error('A topic with this name already exists in this phase.');
+    return clean;
+  },
+  async add(phase){
+    const name = prompt('Topic name:');
+    if(name === null) return;
+    try{
+      const clean = this.validateName(phase, name);
+      const description = prompt('Description (optional):') || '';
+      const response = await apiRequest('/api/topics', { method:'POST', body:JSON.stringify({phase_id:phase.id, name:clean, description}) });
+      const payload = await ProjectStructureManager.apply(response, 'Add topic failed');
+      selectedTopicId = payload.topic?.id || selectedTopicId;
+      render();
+    }catch(error){ showToast(error.message); }
+  },
+  async rename(phase, topic){
+    const name = prompt('Topic name:', topic.name || '');
+    if(name === null) return;
+    try{
+      const clean = this.validateName(phase, name, topic.id);
+      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'PATCH', body:JSON.stringify({name:clean}) });
+      await ProjectStructureManager.apply(response, 'Rename topic failed');
+    }catch(error){ showToast(error.message); }
+  },
+  async remove(topic){
+    if(!confirm(`Delete topic "${topic.name}"?`)) return;
+    try{
+      const response = await apiRequest(`/api/topics/${topic.id}`, { method:'DELETE' });
+      await ProjectStructureManager.apply(response, 'Delete topic failed');
+    }catch(error){ showToast(error.message); }
+  },
+  async move(topic, direction){
+    try{
+      const response = await apiRequest(`/api/topics/${topic.id}/move`, { method:'POST', body:JSON.stringify({direction}) });
+      await ProjectStructureManager.apply(response, 'Move topic failed');
+    }catch(error){ showToast(error.message); }
+  }
+};
+
 function render(){
   state.progress = calculateProgress(state);
   document.getElementById('title').textContent = state.curriculum?.title || state.title || 'Mountain Scope';
@@ -421,24 +541,56 @@ function renderRoadmap(){
     wrap.innerHTML = `
       <div class="phase-head">
         <div class="phase-name">${escapeHtml(phase.name)}</div>
-        <div class="phase-progress">${phaseProgress}%</div>
+        <div class="phase-actions">
+          <div class="phase-progress">${phaseProgress}%</div>
+          <button class="icon-btn" data-action="phase-up" title="Move phase up">↑</button>
+          <button class="icon-btn" data-action="phase-down" title="Move phase down">↓</button>
+          <button class="icon-btn" data-action="phase-edit" title="Rename phase">✎</button>
+          <button class="icon-btn" data-action="phase-delete" title="Delete phase">×</button>
+        </div>
       </div>
       <div class="topic-list"></div>
     `;
+    wrap.querySelector('[data-action="phase-up"]').addEventListener('click',()=>PhaseService.move(phase,'up'));
+    wrap.querySelector('[data-action="phase-down"]').addEventListener('click',()=>PhaseService.move(phase,'down'));
+    wrap.querySelector('[data-action="phase-edit"]').addEventListener('click',()=>PhaseService.rename(phase));
+    wrap.querySelector('[data-action="phase-delete"]').addEventListener('click',()=>PhaseService.remove(phase));
     const list = wrap.querySelector('.topic-list');
     phaseTopics(phase).forEach(topic=>{
-      const btn = document.createElement('button');
-      btn.className = `topic ${topic.id===selectedTopicId?'active':''}`;
-      btn.innerHTML = `
-        <span class="dot ${topic.status}"></span>
-        <span class="topic-name">${escapeHtml(topic.name)}</span>
-        <span class="topic-score">${topicCompletion(topic)}%</span>
+      const row = document.createElement('div');
+      row.className = `topic ${topic.id===selectedTopicId?'active':''}`;
+      row.innerHTML = `
+        <button class="topic-select">
+          <span class="dot ${topic.status}"></span>
+          <span class="topic-name">${escapeHtml(topic.name)}</span>
+          <span class="topic-score">${topicCompletion(topic)}%</span>
+        </button>
+        <div class="topic-actions">
+          <button class="icon-btn" data-action="topic-up" title="Move topic up">↑</button>
+          <button class="icon-btn" data-action="topic-down" title="Move topic down">↓</button>
+          <button class="icon-btn" data-action="topic-edit" title="Rename topic">✎</button>
+          <button class="icon-btn" data-action="topic-delete" title="Delete topic">×</button>
+        </div>
       `;
-      btn.addEventListener('click',()=>{ selectedTopicId=topic.id; activeTab='overview'; render(); });
-      list.appendChild(btn);
+      row.querySelector('.topic-select').addEventListener('click',()=>{ selectedTopicId=topic.id; activeTab='overview'; render(); });
+      row.querySelector('[data-action="topic-up"]').addEventListener('click',()=>TopicService.move(topic,'up'));
+      row.querySelector('[data-action="topic-down"]').addEventListener('click',()=>TopicService.move(topic,'down'));
+      row.querySelector('[data-action="topic-edit"]').addEventListener('click',()=>TopicService.rename(phase, topic));
+      row.querySelector('[data-action="topic-delete"]').addEventListener('click',()=>TopicService.remove(topic));
+      list.appendChild(row);
     });
+    const addTopic = document.createElement('button');
+    addTopic.className = 'btn add-row';
+    addTopic.textContent = 'Add Topic';
+    addTopic.addEventListener('click',()=>TopicService.add(phase));
+    list.appendChild(addTopic);
     root.appendChild(wrap);
   });
+  const addPhase = document.createElement('button');
+  addPhase.className = 'btn primary add-row';
+  addPhase.textContent = 'Add Phase';
+  addPhase.addEventListener('click',()=>PhaseService.add());
+  root.appendChild(addPhase);
 }
 
 function renderWorkspace(){

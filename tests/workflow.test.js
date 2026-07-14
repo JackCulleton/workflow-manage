@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addPhase, addTopic, updateTopic, validateState } from '../lib/workflow.js';
+import { addPhase, addTopic, deletePhase, deleteTopic, movePhase, moveTopic, updatePhase, updateTopic, validateState } from '../lib/workflow.js';
 import { calculateProgress, setManualOverride } from '../lib/curriculum.js';
 
 function state() { return { title: 'Plan', subtitle: '', phases: [] }; }
@@ -44,4 +44,42 @@ test('calculates completion from topic evidence and manual overrides', () => {
   setManualOverride(workflow, workflow.curriculum.phases[0].topics[1].id, { completed: true, reason: 'Evaluator accepted it.' });
   assert.equal(calculateProgress(workflow).overall, 75);
   assert.equal(workflow.curriculum.phases[0].topics[1].manualOverride.completed, true);
+});
+
+test('manages phases with validation and persistent order', () => {
+  const workflow = state();
+  const first = addPhase(workflow, { name: 'Planning' });
+  const second = addPhase(workflow, { name: 'Build' });
+  assert.throws(() => addPhase(workflow, { name: 'planning' }), /already exists/);
+
+  updatePhase(workflow, second.id, { name: 'Implementation', description: 'Write the code.' });
+  assert.equal(workflow.curriculum.phases[1].name, 'Implementation');
+  assert.equal(workflow.phases[1].description, 'Write the code.');
+
+  movePhase(workflow, second.id, 'up');
+  assert.equal(workflow.curriculum.phases[0].id, second.id);
+  assert.equal(workflow.phases[0].id, second.id);
+
+  deletePhase(workflow, first.id);
+  assert.equal(workflow.curriculum.phases.length, 1);
+  assert.equal(workflow.phases.length, 1);
+});
+
+test('manages topics with validation, deletion, and order', () => {
+  const workflow = state();
+  const phase = addPhase(workflow, { name: 'Networking' });
+  const socket = addTopic(workflow, { phase_id: phase.id, name: 'Socket Basics' });
+  const poll = addTopic(workflow, { phase_id: phase.id, name: 'poll()' });
+  assert.throws(() => addTopic(workflow, { phase_id: phase.id, name: 'socket basics' }), /already exists/);
+
+  updateTopic(workflow, poll.id, { name: 'poll system call' });
+  assert.equal(workflow.curriculum.phases[0].topics[1].name, 'poll system call');
+
+  moveTopic(workflow, poll.id, 'up');
+  assert.equal(workflow.curriculum.phases[0].topics[0].id, poll.id);
+  assert.equal(workflow.phases[0].topics[0].id, poll.id);
+
+  deleteTopic(workflow, socket.id);
+  assert.equal(workflow.curriculum.phases[0].topics.length, 1);
+  assert.equal(workflow.phases[0].topics.length, 1);
 });

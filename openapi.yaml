@@ -72,8 +72,61 @@ paths:
               required: [name]
               properties:
                 name: { type: string }
+                description: { type: string }
       responses:
         '201': { description: Phase added }
+  /phases/{phaseId}:
+    patch:
+      operationId: updatePhase
+      summary: Rename or update a phase.
+      parameters:
+        - name: phaseId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '200': { description: Phase updated }
+    delete:
+      operationId: deletePhase
+      summary: Delete a phase and all topics inside it.
+      parameters:
+        - name: phaseId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Phase deleted }
+  /phases/{phaseId}/move:
+    post:
+      operationId: movePhase
+      summary: Move a phase up or down.
+      parameters:
+        - name: phaseId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction]
+              properties:
+                direction:
+                  type: string
+                  enum: [up, down]
+      responses:
+        '200': { description: Phase moved }
   /topics:
     post:
       operationId: addTopic
@@ -138,6 +191,38 @@ paths:
                 notes: { type: string }
       responses:
         '200': { description: Topic updated }
+    delete:
+      operationId: deleteTopic
+      summary: Delete a topic and its cached resources/progress.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Topic deleted }
+  /topics/{topicId}/move:
+    post:
+      operationId: moveTopic
+      summary: Move a topic up or down within its phase.
+      parameters:
+        - name: topicId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction]
+              properties:
+                direction:
+                  type: string
+                  enum: [up, down]
+      responses:
+        '200': { description: Topic moved }
   /topics/{topicId}/resources:
     get:
       operationId: getTopicResources
@@ -267,6 +352,7 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
+        description: { type: string }
         projects:
           type: array
           items: { $ref: '#/components/schemas/Project' }

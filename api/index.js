@@ -1,4 +1,4 @@
-import { addPhase, addTopic, updateTopic, validateState } from '../lib/workflow.js';
+import { addPhase, addTopic, deletePhase, deleteTopic, movePhase, moveTopic, updatePhase, updateTopic, validateState } from '../lib/workflow.js';
 import {
   calculateProgress,
   dynamicResourcesFor,
@@ -36,7 +36,7 @@ export function statusForApiError(error) {
   const message = String((error && error.message) || '');
   if (/too large/i.test(message)) return 413;
   if (/OPENAI_API_KEY|OpenAI request failed|OpenAI returned invalid JSON|OpenAI response/i.test(message)) return 500;
-  if (/not found|required|must|contain/i.test(message)) return 400;
+  if (/not found|required|must|contain|already exists|direction/i.test(message)) return 400;
   return 500;
 }
 
@@ -160,6 +160,26 @@ export default async function handler(req, res) {
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
       return send(res, 201, { phase, workflow: state });
     }
+    const phaseMatch = path.match(/^\/phases\/([^/]+)$/);
+    if (phaseMatch && req.method === 'PATCH') {
+      const phase = updatePhase(state, phaseMatch[1], req.body || {});
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { phase, workflow: state });
+    }
+    if (phaseMatch && req.method === 'DELETE') {
+      deletePhase(state, phaseMatch[1]);
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { workflow: state });
+    }
+    const phaseMoveMatch = path.match(/^\/phases\/([^/]+)\/move$/);
+    if (phaseMoveMatch && req.method === 'POST') {
+      movePhase(state, phaseMoveMatch[1], (req.body && req.body.direction) || '');
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { workflow: state });
+    }
     if (req.method === 'POST' && path === '/topics') {
       if (!req.body || !req.body.phase_id || !req.body.name || !req.body.name.trim()) {
         console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 400, errorMessage: 'phase_id and name are required.' });
@@ -176,6 +196,19 @@ export default async function handler(req, res) {
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { topic, workflow: state });
+    }
+    if (req.method === 'DELETE' && match) {
+      deleteTopic(state, match[1]);
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { workflow: state });
+    }
+    const topicMoveMatch = path.match(/^\/topics\/([^/]+)\/move$/);
+    if (req.method === 'POST' && topicMoveMatch) {
+      moveTopic(state, topicMoveMatch[1], (req.body && req.body.direction) || '');
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { workflow: state });
     }
     const notesMatch = path.match(/^\/topics\/([^/]+)\/notes$/);
     if (req.method === 'PATCH' && notesMatch) {
