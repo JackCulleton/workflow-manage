@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { addPhase, addTopic, updateTopic, validateState } from '../lib/workflow.js';
-import { calculateProgress, createCurriculumFromText, setManualOverride } from '../lib/curriculum.js';
+import { calculateProgress, setManualOverride } from '../lib/curriculum.js';
 
 function state() { return { title: 'Plan', subtitle: '', phases: [] }; }
 
@@ -19,24 +19,6 @@ test('rejects an invalid topic status', () => {
   const phase = addPhase(workflow, { name: 'Build' });
   const topic = addTopic(workflow, { phase_id: phase.id, name: 'Code' });
   assert.throws(() => updateTopic(workflow, topic.id, { status: 'maybe' }), /status/);
-});
-
-test('curriculum building requires the configured AI provider', async () => {
-  const previousKey = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  await assert.rejects(() => createCurriculumFromText({
-    title: 'Minishell',
-    text: `
-Phase Parsing
-Topic Tokenizer
-Objective: Split input into tokens
-Deliverable: tokenizer.c
-Success Criteria: Handles quoted strings
-Keywords: parser, token
-Resource: https://example.com/minishell
-`
-  }), /OPENAI_API_KEY/);
-  if (previousKey) process.env.OPENAI_API_KEY = previousKey;
 });
 
 test('calculates completion from topic evidence and manual overrides', () => {

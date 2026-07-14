@@ -1,24 +1,17 @@
 import { addPhase, addTopic, updateTopic, validateState } from '../lib/workflow.js';
 import {
-  auditTopic,
-  auditRepository,
   calculateProgress,
   dynamicResourcesFor,
   ensureCurriculumState,
   findCurriculumTopic,
-  importCurriculum,
   mentorReply,
   setManualOverride,
   updateTopicNotes
 } from '../lib/curriculum.js';
 
 const WORKFLOW_ID = 'main';
-const MAX_IMPORT_TEXT_CHARS = 300000;
-const MAX_IMPORT_FILE_DATA_CHARS = 4 * 1024 * 1024;
-const PDF_DATA_URL_PATTERN = /^data:application\/pdf(?:;[^,]*)?;base64,/i;
 
 export const config = {
-  maxDuration: 60,
   api: {
     bodyParser: {
       sizeLimit: '20mb'
@@ -43,12 +36,12 @@ export function statusForApiError(error) {
   const message = String((error && error.message) || '');
   if (/too large/i.test(message)) return 413;
   if (/OPENAI_API_KEY|OpenAI request failed|OpenAI returned invalid JSON|OpenAI response/i.test(message)) return 500;
-  if (/not found|required|must|contain|repository|malformed|uploaded|valid application\/pdf|only pdf/i.test(message)) return 400;
+  if (/not found|required|must|contain/i.test(message)) return 400;
   return 500;
 }
 
 export function messageForApiError(error, path) {
-  const message = String((error && error.message) || 'Failed to build roadmap');
+  const message = String((error && error.message) || 'Request failed');
   if (/OPENAI_API_KEY/i.test(message)) return `Server route ${path} failed: ${message}`;
   return message;
 }
@@ -61,44 +54,6 @@ function supabaseHeaders() {
 function contentLength(req) {
   const length = Number(req.headers['content-length']);
   return Number.isFinite(length) ? length : null;
-}
-
-function describeImportPayload(input = {}) {
-  const fileData = input.fileData ? String(input.fileData) : '';
-  const text = input.text ? String(input.text) : '';
-  return {
-    title: input.title || '',
-    fileName: input.fileName || '',
-    mimeType: input.mimeType || '',
-    hasFileData: Boolean(fileData),
-    fileDataChars: fileData.length,
-    textChars: text.length,
-    payloadKind: fileData ? 'base64 file data' : (text ? 'extracted or pasted text' : 'empty')
-  };
-}
-
-export function validateImportPayload(input = {}) {
-  const text = input.text ? String(input.text) : '';
-  const fileData = input.fileData ? String(input.fileData) : '';
-  const fileName = input.fileName ? String(input.fileName) : '';
-  const mimeType = input.mimeType ? String(input.mimeType) : '';
-  if (!text.trim() && !fileData) {
-    throw new Error('Curriculum text or PDF file data is required.');
-  }
-  if (text.length > MAX_IMPORT_TEXT_CHARS) {
-    throw new Error(`Curriculum text is too large (${text.length} characters). Paste a shorter extract or split the curriculum into smaller imports.`);
-  }
-  if (fileData.length > MAX_IMPORT_FILE_DATA_CHARS) {
-    throw new Error('Uploaded file is too large for roadmap import. Use a PDF under 3 MB, or extract the relevant curriculum text and import that instead.');
-  }
-  if (fileData) {
-    if (fileName && !/\.pdf$/i.test(fileName)) throw new Error('Only PDF uploads are supported for file import.');
-    if (mimeType && mimeType !== 'application/pdf') throw new Error('Uploaded file must be a PDF.');
-    if (!PDF_DATA_URL_PATTERN.test(fileData)) throw new Error('Uploaded PDF data must be a valid application/pdf base64 data URL.');
-    const base64 = fileData.replace(PDF_DATA_URL_PATTERN, '');
-    if (!base64 || !/^[A-Za-z0-9+/=]+$/.test(base64)) throw new Error('Uploaded PDF data is malformed.');
-  }
-  return input;
 }
 
 function routeLogBase(req, path, id, startedAt) {
@@ -188,35 +143,11 @@ export default async function handler(req, res) {
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { curriculum: state.curriculum, progress: state.progress });
     }
-    if (req.method === 'POST' && path === '/curriculum/import') {
-      const payload = validateImportPayload(req.body || {});
-      console.info('Curriculum import request', {
-        requestId: id,
-        method: req.method,
-        path,
-        contentLength: contentLength(req),
-        ...describeImportPayload(payload)
-      });
-      const result = await importCurriculum(state, payload);
-      if (result.needsConfirmation) {
-        console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 409 });
-        return send(res, 409, result);
-      }
-      await writeState(state);
-      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 201 });
-      return send(res, 201, result);
-    }
     if (req.method === 'GET' && path === '/progress') {
       state.progress = calculateProgress(state);
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { progress: state.progress });
-    }
-    if (req.method === 'POST' && path === '/repository/audit') {
-      const result = await auditRepository(state, req.body || {});
-      await writeState(state);
-      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, result);
     }
 
     if (req.method === 'POST' && path === '/phases') {
@@ -275,13 +206,6 @@ export default async function handler(req, res) {
     const mentorMatch = path.match(/^\/topics\/([^/]+)\/mentor$/);
     if (req.method === 'POST' && mentorMatch) {
       const result = await mentorReply(state, mentorMatch[1], (req.body && req.body.question) || '');
-      await writeState(state);
-      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, result);
-    }
-    const auditMatch = path.match(/^\/topics\/([^/]+)\/audit$/);
-    if (req.method === 'POST' && auditMatch) {
-      const result = await auditTopic(state, auditMatch[1], req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, result);

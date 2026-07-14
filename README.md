@@ -1,8 +1,8 @@
 # Mountain Scope
 
-Mountain Scope is an AI-ready curriculum engine that turns structured curriculum material into an interactive learning roadmap.
+Mountain Scope is an AI-ready curriculum workspace for tracking an interactive learning roadmap.
 
-The curriculum is the source of truth. The dashboard stores phases, projects, topics, learning objectives, deliverables, success criteria, resources, notes, audits, and progress. Topic completion is calculated from topic-level completion data and manual overrides, not estimated from a vague overall feeling.
+The curriculum is the source of truth. The dashboard stores phases, projects, topics, learning objectives, deliverables, success criteria, resources, notes, and progress. Topic completion is calculated from topic-level completion data and manual overrides, not estimated from a vague overall feeling.
 
 ## Current Implementation
 
@@ -10,15 +10,13 @@ This repository implements the Version 2 curriculum workflow described in `v2_up
 
 Implemented now:
 
-- AI Curriculum Builder for pasted curriculum text or uploaded PDFs.
 - Structured curriculum storage in the existing Supabase-backed workflow JSON.
 - Dashboard with overall completion, phase completion, progress intelligence, and selectable topics.
-- Topic workspace tabs: Overview, Resources, AI Chat, Verify, and Notes.
+- Topic workspace tabs: Overview, Resources, AI Chat, and Notes.
 - Four topic states: `complete`, `partial`, `not_verified`, and `missing`.
-- Manual completion override that remains separate from audit verification.
+- Manual completion override.
 - Dynamic resource discovery through AI web search.
-- Topic mentor responses generated from selected curriculum, topic criteria, previous audit data, notes, and repository context.
-- Evidence-first repository audit endpoint that sends actual source files, README content, and repository metadata to the LLM for comparison against stored criteria.
+- Topic mentor responses generated from selected curriculum, topic criteria, and notes.
 - OpenAPI schema for Custom GPT Actions.
 - GPT instructions that require ChatGPT to read stored curriculum before advising.
 
@@ -28,36 +26,27 @@ Set these server-side environment variables:
 
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`, optional, defaults to `gpt-5.2`
-- `GITHUB_TOKEN`, optional, improves GitHub API rate limits and allows authenticated repository reads where the token has access
 
-Without `OPENAI_API_KEY`, curriculum import, resource discovery, AI chat, and repository verification return an error.
-
-Production PDF roadmap import accepts PDF uploads up to 3 MB. Larger PDFs are rejected before upload in the dashboard, and oversized API payloads return a JSON `413` when they reach the function; for larger curriculum sources, extract the relevant text and import that text instead.
+Without `OPENAI_API_KEY`, resource discovery and AI chat return an error. PDF roadmap generation and repository verification have been removed to reduce token usage.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-  PDF[Curriculum Text or PDF Upload]
-  Builder[Curriculum Builder]
   DB[Supabase workflow_state JSON]
   Dashboard[Dashboard]
   Workspace[Topic Workspace]
   Mentor[Topic Mentor]
-  Audit[Repository Audit]
+  Resources[Resource Discovery]
   Progress[Progress Engine]
   GPT[Custom GPT Action]
-  GitHub[GitHub Repository]
 
-  PDF --> Builder
-  Builder --> DB
   DB --> Dashboard
   Dashboard --> Workspace
   Workspace --> Mentor
-  Workspace --> Audit
-  Audit --> GitHub
-  Audit --> Progress
+  Workspace --> Resources
   Mentor --> DB
+  Resources --> DB
   Progress --> DB
   GPT --> DB
 ```
@@ -65,10 +54,10 @@ flowchart TD
 ## Project Structure
 
 - `public/index.html` contains the curriculum dashboard and topic workspace.
-- `api/index.js` exposes protected workflow, curriculum, mentor, audit, notes, resources, and manual override routes.
+- `api/index.js` exposes protected workflow, curriculum, mentor, notes, resources, and manual override routes.
 - `lib/workflow.js` keeps workflow validation and phase/topic mutations.
-- `lib/curriculum.js` contains progress, manual override, GitHub source collection, and AI orchestration helpers.
-- `lib/ai.js` contains Responses API calls, structured output schemas, AI curriculum parsing, AI mentoring, AI resource discovery, and AI repository auditing.
+- `lib/curriculum.js` contains progress, manual override, and AI orchestration helpers.
+- `lib/ai.js` contains Responses API calls, structured output schemas, AI mentoring, and AI resource discovery.
 - `openapi.yaml` defines the Custom GPT Action schema.
 - `gpt-instructions.md` defines the GPT behaviour rules.
 - `supabase.sql` creates the Supabase storage table.
@@ -91,7 +80,6 @@ Configure these environment variables in Vercel:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY`
 - optional `OPENAI_MODEL`
-- optional `GITHUB_TOKEN`
 
 Deploy the project to Vercel. AI features use the server-side `OPENAI_API_KEY`; the browser does not ask users for OpenAI or workflow API keys.
 
@@ -128,7 +116,5 @@ npm run dev
 
 ## Remaining Limitations
 
-- Very large PDFs or repositories may exceed request limits and need chunking or background jobs.
-- Repository verification samples source files to stay within model context limits.
-- Private GitHub repository auditing requires a `GITHUB_TOKEN` with access.
-- Automatic curriculum difference review is implemented at the API helper level, but the browser import flow currently confirms replacement directly.
+- PDF roadmap generation and repository verification are intentionally removed to keep token usage low.
+- Roadmap changes should be made through ordinary workflow/topic edits or full workflow replacement.

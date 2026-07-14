@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Mountain Scope Curriculum Engine
-  description: Read, build, mentor and verify curriculum-driven learning roadmaps.
+  description: Read, edit, mentor and track curriculum-driven learning roadmaps.
   version: 2.0.0
 servers:
   - url: https://workflow-manage.vercel.app/api
@@ -46,31 +46,6 @@ paths:
                 properties:
                   curriculum: { $ref: '#/components/schemas/Curriculum' }
                   progress: { $ref: '#/components/schemas/Progress' }
-  /curriculum/import:
-    post:
-      operationId: importCurriculum
-      summary: Build and store a curriculum roadmap from structured curriculum text.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [text]
-              properties:
-                title: { type: string }
-                text: { type: string }
-                sourceName: { type: string }
-                sourceType: { type: string }
-                fileName: { type: string }
-                mimeType: { type: string }
-                fileData:
-                  type: string
-                  description: Base64 data URL for an uploaded curriculum file, such as a PDF.
-                confirmUpdate: { type: boolean }
-      responses:
-        '201': { description: Curriculum imported }
-        '409': { description: A newer curriculum differs from stored curriculum and requires confirmation }
   /progress:
     get:
       operationId: getProgress
@@ -132,7 +107,7 @@ paths:
   /topics/{topicId}:
     patch:
       operationId: updateTopic
-      summary: Update topic curriculum fields or verification status.
+      summary: Update topic curriculum fields or status.
       parameters:
         - name: topicId
           in: path
@@ -177,7 +152,7 @@ paths:
   /topics/{topicId}/mentor:
     post:
       operationId: askTopicMentor
-      summary: Ask the topic mentor using stored curriculum context and previous audits.
+      summary: Ask the topic mentor using stored curriculum context and notes.
       parameters:
         - name: topicId
           in: path
@@ -193,26 +168,6 @@ paths:
                 question: { type: string }
       responses:
         '200': { description: Mentor reply }
-  /topics/{topicId}/audit:
-    post:
-      operationId: auditTopic
-      summary: Verify a topic against a GitHub repository and stored completion criteria.
-      parameters:
-        - name: topicId
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [repositoryUrl]
-              properties:
-                repositoryUrl: { type: string }
-      responses:
-        '200': { description: Evidence-based audit }
   /topics/{topicId}/notes:
     patch:
       operationId: updateTopicNotes
@@ -257,26 +212,6 @@ components:
     TopicStatus:
       type: string
       enum: [complete, partial, not_verified, missing]
-    Evidence:
-      type: object
-      properties:
-        criterion: { type: string }
-        met: { type: boolean }
-        detail: { type: string }
-    Audit:
-      type: object
-      properties:
-        id: { type: string }
-        repository: { type: string }
-        status: { $ref: '#/components/schemas/TopicStatus' }
-        completion: { type: number }
-        confidence: { type: number }
-        evidence:
-          type: array
-          items: { $ref: '#/components/schemas/Evidence' }
-        recommendedNextSteps:
-          type: array
-          items: { type: string }
     Resource:
       type: object
       properties:
@@ -306,7 +241,6 @@ components:
         status: { $ref: '#/components/schemas/TopicStatus' }
         completion: { type: number }
         confidence: { type: number }
-        audit: { $ref: '#/components/schemas/Audit' }
         notes: { type: string }
         manualOverride:
           type: object
@@ -381,9 +315,6 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Phase' }
         progress: { $ref: '#/components/schemas/Progress' }
-        repository:
-          type: object
-          additionalProperties: true
     WorkflowResponse:
       type: object
       properties:

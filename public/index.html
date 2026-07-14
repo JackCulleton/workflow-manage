@@ -178,9 +178,6 @@ textarea,input{
 textarea:focus,input:focus{border-color:var(--orange)}
 textarea{resize:vertical;min-height:120px;line-height:1.5}
 .field-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}
-.importer{display:none;margin-bottom:18px}
-.importer.open{display:block}
-.importer textarea{min-height:190px}
 .resource{
   display:flex;
   justify-content:space-between;
@@ -194,19 +191,6 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 }
 .resource a{color:var(--text);font-weight:700;text-decoration:none;font-size:13px}
 .resource span{color:var(--faint);font-size:12px}
-.evidence{
-  border:1px solid var(--border);
-  border-radius:8px;
-  padding:10px 12px;
-  margin-bottom:8px;
-  background:var(--panel-2);
-  display:grid;
-  grid-template-columns:auto minmax(0,1fr);
-  gap:9px;
-}
-.mark{font-weight:800}
-.mark.ok{color:var(--green)}
-.mark.no{color:var(--red)}
 .toast{
   position:fixed;
   right:18px;
@@ -238,31 +222,9 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
       <div class="subtitle" id="subtitle">Curriculum-driven learning roadmap with evidence-based progress.</div>
     </div>
     <div class="actions">
-      <button class="btn" id="toggleImport">Import Curriculum</button>
-      <button class="btn" id="editRepo">Repository</button>
       <button class="btn primary" id="saveBtn">Save</button>
     </div>
   </header>
-
-  <section class="panel importer" id="importer">
-    <div class="two-col">
-      <div>
-        <div class="section-title">Curriculum Builder</div>
-        <input id="curriculumTitle" placeholder="Curriculum title">
-        <div style="height:10px"></div>
-        <textarea id="curriculumText" placeholder="Paste curriculum text with phases, projects, topics, objectives, deliverables, success criteria, keywords and resources."></textarea>
-        <div style="height:10px"></div>
-        <div class="field-row">
-          <input type="file" id="curriculumFile" accept=".txt,.md,.pdf">
-          <button class="btn primary" id="importBtn">Build Roadmap</button>
-        </div>
-      </div>
-      <div class="card">
-        <h3>Accepted Structure</h3>
-        <p>Upload the official curriculum PDF or paste curriculum text. The server sends the document to the configured LLM so the roadmap is extracted from the source material.</p>
-      </div>
-    </div>
-  </section>
 
   <main class="grid">
     <aside class="panel">
@@ -275,7 +237,6 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
         <div class="metric">
           <div class="metric-label">Topics</div>
           <div class="metric-value" id="topicCount">0</div>
-          <div class="small" id="repoLabel">No repository</div>
         </div>
       </div>
 
@@ -290,7 +251,7 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
     </aside>
 
     <section class="panel" id="workspace">
-      <div class="empty">Import a curriculum or select a topic to open the workspace.</div>
+      <div class="empty">Select a topic to open the workspace.</div>
     </section>
   </main>
 </div>
@@ -303,13 +264,11 @@ import { readApiJson } from './client-response.js';
 const STATE_KEY = 'mountain-scope:v2-curriculum';
 const API_URL = '/api/workflow';
 const TOPIC_STATES = ['complete','partial','not_verified','missing'];
-const MAX_PDF_BYTES = 3 * 1024 * 1024;
 
 let state = null;
 let selectedTopicId = null;
 let activeTab = 'overview';
 let saveTimer = null;
-let uploadedCurriculumFile = null;
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function now(){ return new Date().toISOString(); }
@@ -318,21 +277,20 @@ function blankTopic(name){
   return {
     id: uid(), name, description:'', objectives:[], deliverables:[], successCriteria:[name],
     keywords:name.toLowerCase().split(/\s+/).filter(w=>w.length>2), glossary:[],
-    resources:{ static:[], dynamic:[] }, status:'not_verified', completion:0, confidence:0,
-    audit:null, audits:[], notes:'', chatHistory:[], manualOverride:null
+    resources:{ static:[], dynamic:[] }, status:'not_verified', completion:0,
+    notes:'', chatHistory:[], manualOverride:null
   };
 }
 
 function defaultState(){
   const phases = [
-    { id:uid(), name:'Requirements', projects:[], topics:[blankTopic('Read the official project PDF'), blankTopic('Extract mandatory requirements')] },
+    { id:uid(), name:'Requirements', projects:[], topics:[blankTopic('Read the official project brief'), blankTopic('Extract mandatory requirements')] },
     { id:uid(), name:'Planning', projects:[], topics:[blankTopic('Design project phases'), blankTopic('Identify learning topics')] },
-    { id:uid(), name:'Build', projects:[], topics:[blankTopic('Implement core requirements'), blankTopic('Verify completion criteria')] }
+    { id:uid(), name:'Build', projects:[], topics:[blankTopic('Implement core requirements'), blankTopic('Review completion criteria')] }
   ];
   return {
     title:'Mountain Scope',
     subtitle:'Curriculum-driven learning roadmap with evidence-based progress.',
-    repository:null,
     curriculum:{ id:uid(), title:'42 Project Curriculum', source:{name:'Default roadmap',type:'seed',importedAt:now()}, phases, glossary:[], resources:[], versionHistory:[] },
     phases: phases.map(p=>({ id:p.id, name:p.name, topics:p.topics, documents:[] })),
     progress:null
@@ -390,8 +348,7 @@ function enrichTopic(t){
     objectives:t.objectives||[], deliverables:t.deliverables||[], successCriteria:t.successCriteria||t.activities||[],
     keywords:t.keywords||[], glossary:t.glossary||[], resources:t.resources||{static:[],dynamic:[]},
     status:normaliseStatus(t.status), completion:typeof t.completion==='number'?t.completion:undefined,
-    confidence:t.confidence||0, audit:t.audit||null, audits:t.audits||[], notes:t.notes||'',
-    chatHistory:t.chatHistory||[], manualOverride:t.manualOverride||null
+    notes:t.notes||'', chatHistory:t.chatHistory||[], manualOverride:t.manualOverride||null
   };
 }
 
@@ -442,27 +399,6 @@ async function persist(){
 }
 function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(persist,350); }
 
-async function calculateRepositoryProgress(repositoryUrl){
-  if(!repositoryUrl){ showToast('Repository is required.'); return; }
-  state.repository = { url: repositoryUrl };
-  render();
-  showToast('Calculating repository progress...');
-  try{
-    const response = await apiRequest('/api/repository/audit', {
-      method:'POST',
-      body:JSON.stringify({repositoryUrl})
-    });
-    const payload = await readApiJson(response, 'Repository progress failed');
-    state = migrate(payload.workflow);
-    state.progress = payload.progress || calculateProgress(state);
-    localStorage.setItem(STATE_KEY, JSON.stringify(state));
-    showToast(`Repository progress calculated: ${state.progress.overall}% complete.`);
-  }catch(error){
-    showToast(error.message);
-  }
-  render();
-}
-
 function render(){
   state.progress = calculateProgress(state);
   document.getElementById('title').textContent = state.curriculum?.title || state.title || 'Mountain Scope';
@@ -470,7 +406,6 @@ function render(){
   document.getElementById('overall').textContent = `${state.progress.overall}%`;
   document.getElementById('overallFill').style.width = `${state.progress.overall}%`;
   document.getElementById('topicCount').textContent = allTopics().length;
-  document.getElementById('repoLabel').textContent = state.repository?.url || 'No repository';
   document.getElementById('recommended').textContent = state.progress.recommendedNextTopic || 'None';
   document.getElementById('remaining').textContent = state.progress.estimatedRemainingWork;
   renderRoadmap();
@@ -510,7 +445,9 @@ function renderRoadmap(){
 function renderWorkspace(){
   const topic = selectedTopic();
   const root = document.getElementById('workspace');
-  if(!topic){ root.innerHTML = '<div class="empty">Import a curriculum or select a topic to open the workspace.</div>'; return; }
+  if(!topic){ root.innerHTML = '<div class="empty">Select a topic to open the workspace.</div>'; return; }
+  const tabs = ['overview','resources','chat','notes'];
+  if(!tabs.includes(activeTab)) activeTab = 'overview';
   root.innerHTML = `
     <div class="workspace-head">
       <div>
@@ -520,7 +457,7 @@ function renderWorkspace(){
       <span class="status-pill ${topic.status}">${labelStatus(topic.status)} - ${topicCompletion(topic)}%</span>
     </div>
     <div class="tabs">
-      ${['overview','resources','chat','verify','notes'].map(tab=>`<button class="tab ${activeTab===tab?'active':''}" data-tab="${tab}">${tab[0].toUpperCase()+tab.slice(1)}</button>`).join('')}
+      ${tabs.map(tab=>`<button class="tab ${activeTab===tab?'active':''}" data-tab="${tab}">${tab[0].toUpperCase()+tab.slice(1)}</button>`).join('')}
     </div>
     <div id="tabBody"></div>
   `;
@@ -533,7 +470,6 @@ function renderTab(topic){
   if(activeTab === 'overview') renderOverview(body, topic);
   if(activeTab === 'resources') renderResources(body, topic);
   if(activeTab === 'chat') renderChat(body, topic);
-  if(activeTab === 'verify') renderVerify(body, topic);
   if(activeTab === 'notes') renderNotes(body, topic);
 }
 
@@ -543,7 +479,7 @@ function renderOverview(body, topic){
       <div class="card"><h3>Learning Objectives</h3>${list(topic.objectives)}</div>
       <div class="card"><h3>Completion Checklist</h3>${list(criteriaFor(topic))}</div>
       <div class="card"><h3>Deliverables</h3>${list(topic.deliverables)}</div>
-      <div class="card"><h3>Confidence</h3><p>${topic.audit?.confidence || topic.confidence || 0}%</p><p>${topic.manualOverride?.completed ? 'Manually completed' : 'Verification driven'}</p></div>
+      <div class="card"><h3>Progress</h3><p>${topicCompletion(topic)}%</p><p>${topic.manualOverride?.completed ? 'Manually completed' : 'Tracked from topic status'}</p></div>
     </div>
   `;
 }
@@ -596,134 +532,19 @@ function renderChat(body, topic){
   });
 }
 
-function renderVerify(body, topic){
-  const audit = topic.audit;
-  body.innerHTML = `
-    <div class="field-row">
-      <input id="repoInput" placeholder="GitHub repository URL or owner/repo" value="${escapeAttr(state.repository?.url || '')}">
-      <button class="btn primary" id="auditBtn">Verify</button>
-    </div>
-    <div style="height:10px"></div>
-    <div class="field-row">
-      <input id="manualReason" placeholder="Manual completion reason">
-      <button class="btn" id="manualBtn">${topic.manualOverride?.completed ? 'Clear Manual' : 'Manual Complete'}</button>
-    </div>
-    <div style="height:16px"></div>
-    ${audit ? auditView(audit) : '<div class="empty">No audit has been run for this topic.</div>'}
-  `;
-  document.getElementById('auditBtn').addEventListener('click', async()=>{
-    const repositoryUrl = document.getElementById('repoInput').value.trim();
-    if(!repositoryUrl){ showToast('Repository is required.'); return; }
-    state.repository = { url: repositoryUrl };
-    try{
-      const response = await apiRequest(`/api/topics/${topic.id}/audit`, { method:'POST', body:JSON.stringify({repositoryUrl}) });
-      const payload = await readApiJson(response, 'Audit failed');
-      Object.assign(topic, payload.topic);
-      state.progress = payload.progress || calculateProgress(state);
-      localStorage.setItem(STATE_KEY, JSON.stringify(state));
-    }catch(error){ showToast(error.message); }
-    render();
-  });
-  document.getElementById('manualBtn').addEventListener('click',()=>{
-    const completed = !topic.manualOverride?.completed;
-    topic.manualOverride = completed ? { completed:true, reason:document.getElementById('manualReason').value.trim(), updatedAt:now() } : null;
-    topic.completion = completed ? 100 : (topic.audit?.completion || 0);
-    state.progress = calculateProgress(state);
-    scheduleSave();
-    render();
-  });
-}
-
 function renderNotes(body, topic){
   body.innerHTML = `<textarea id="notesBox" placeholder="Personal notes for this topic.">${escapeHtml(topic.notes || '')}</textarea>`;
   document.getElementById('notesBox').addEventListener('input', e=>{ topic.notes = e.target.value; scheduleSave(); });
 }
 
-function auditView(audit){
-  return `
-    <div class="two-col">
-      <div class="card"><h3>Status</h3><p>${labelStatus(audit.status)}</p><p>Completion: ${audit.completion}%</p><p>Confidence: ${audit.confidence}%</p></div>
-      <div class="card"><h3>Recommended Next Steps</h3>${list(audit.recommendedNextSteps || [])}</div>
-    </div>
-    <div style="height:14px"></div>
-    ${(audit.evidence||[]).map(item=>`
-      <div class="evidence">
-        <div class="mark ${item.met?'ok':'no'}">${item.met?'OK':'MISS'}</div>
-        <div><strong>${escapeHtml(item.criterion)}</strong><p class="small">${escapeHtml(item.detail)}</p>${auditFiles(item.files)}</div>
-      </div>
-    `).join('')}
-  `;
-}
-
-async function importCurriculum(){
-  const text = document.getElementById('curriculumText').value.trim();
-  if(!text && !uploadedCurriculumFile){ showToast('Curriculum text or PDF is required.'); return; }
-  const title = document.getElementById('curriculumTitle').value.trim();
-  const isPdfUpload = uploadedCurriculumFile && /pdf$/i.test(uploadedCurriculumFile.name);
-  const payload = {
-    title,
-    text: isPdfUpload ? '' : text,
-    fileName: uploadedCurriculumFile && uploadedCurriculumFile.name,
-    mimeType: uploadedCurriculumFile && uploadedCurriculumFile.type,
-    fileData: isPdfUpload ? uploadedCurriculumFile.dataUrl : null,
-    sourceName: uploadedCurriculumFile ? uploadedCurriculumFile.name : 'Dashboard import',
-    sourceType: uploadedCurriculumFile ? uploadedCurriculumFile.type : 'text',
-    confirmUpdate:true
-  };
-  try{
-    const response = await apiRequest('/api/curriculum/import', {
-      method:'POST',
-      body:JSON.stringify(payload)
-    });
-    const data = await readApiJson(response, 'Build roadmap failed');
-    state = migrate(data.workflow);
-  }catch(error){
-    showToast(error.message);
-    return;
-  }
-  selectedTopicId = allTopics()[0]?.id || null;
-  document.getElementById('importer').classList.remove('open');
-  render();
-}
-
 function criteriaFor(topic){ return [...(topic.successCriteria||[]), ...(topic.deliverables||[]), ...(topic.objectives||[])].filter(Boolean).length ? [...(topic.successCriteria||[]), ...(topic.deliverables||[]), ...(topic.objectives||[])].filter(Boolean) : [topic.name]; }
 function list(items){ return items && items.length ? `<ul>${items.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p>None stored.</p>'; }
 function labelStatus(status){ return ({complete:'Complete',partial:'Partial',not_verified:'Not Verified',missing:'Missing'})[status] || status; }
-function auditFiles(files){ return files && files.length ? `<p class="small">${files.map(file=>`${escapeHtml(file.path)}: ${escapeHtml(file.snippet)}`).join('<br>')}</p>` : ''; }
 function escapeHtml(value){ const div=document.createElement('div'); div.textContent=value == null ? '' : String(value); return div.innerHTML; }
 function escapeAttr(value){ return escapeHtml(value).replace(/"/g,'&quot;'); }
 function showToast(message){ const toast=document.getElementById('toast'); toast.textContent=message; toast.style.display='block'; setTimeout(()=>toast.style.display='none',3600); }
 
-document.getElementById('toggleImport').addEventListener('click',()=>document.getElementById('importer').classList.toggle('open'));
-document.getElementById('importBtn').addEventListener('click',importCurriculum);
 document.getElementById('saveBtn').addEventListener('click',()=>persist().then(()=>showToast('Saved.')));
-document.getElementById('editRepo').addEventListener('click',()=>{
-  const value = prompt('GitHub repository URL or owner/repo:', state.repository?.url || '');
-  if(value !== null){
-    const repositoryUrl = value.trim();
-    if(repositoryUrl) calculateRepositoryProgress(repositoryUrl);
-    else { state.repository = null; scheduleSave(); render(); }
-  }
-});
-document.getElementById('curriculumFile').addEventListener('change',event=>{
-  const file = event.target.files[0];
-  if(!file) return;
-  if(/pdf$/i.test(file.name) && file.size > MAX_PDF_BYTES){
-    uploadedCurriculumFile = null;
-    event.target.value = '';
-    showToast('PDF is too large. Upload a PDF under 3 MB, or paste extracted curriculum text.');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    if(!document.getElementById('curriculumTitle').value) document.getElementById('curriculumTitle').value = file.name.replace(/\.[^.]+$/,'');
-    uploadedCurriculumFile = { name:file.name, type:file.type || 'application/octet-stream', dataUrl:String(reader.result || '') };
-    if(!/pdf$/i.test(file.name)){
-      document.getElementById('curriculumText').value = atob(uploadedCurriculumFile.dataUrl.split(',')[1] || '');
-    }
-  };
-  reader.readAsDataURL(file);
-});
 
 loadState();
 </script>
