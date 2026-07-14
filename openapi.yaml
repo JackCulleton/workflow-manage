@@ -141,12 +141,16 @@ paths:
   /topics/{topicId}/resources:
     get:
       operationId: getTopicResources
-      summary: Generate dynamic resource links for a topic and return static resources.
+      summary: Return cached resources for a topic, or refresh them when explicitly requested.
       parameters:
         - name: topicId
           in: path
           required: true
           schema: { type: string }
+        - name: refresh
+          in: query
+          required: false
+          schema: { type: boolean }
       responses:
         '200': { description: Topic resources }
   /topics/{topicId}/mentor:
@@ -217,6 +221,8 @@ components:
       properties:
         id: { type: string }
         title: { type: string }
+        source: { type: string }
+        description: { type: string }
         url: { type: string }
         type: { type: string }
     Topic:

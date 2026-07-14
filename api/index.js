@@ -198,10 +198,11 @@ export default async function handler(req, res) {
         console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 404, errorMessage: 'Topic not found.' });
         return sendError(res, 404, 'Topic not found.', id);
       }
-      topic.resources.dynamic = await dynamicResourcesFor(topic, state.curriculum);
+      const refresh = new URL(req.url, 'https://workflow.local').searchParams.get('refresh') === 'true';
+      const result = await dynamicResourcesFor(topic, state.curriculum, { refresh });
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { resources: topic.resources, topic });
+      return send(res, 200, { resources: result.resources, searched: result.searched, topic });
     }
     const mentorMatch = path.match(/^\/topics\/([^/]+)\/mentor$/);
     if (req.method === 'POST' && mentorMatch) {

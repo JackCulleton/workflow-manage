@@ -179,18 +179,16 @@ textarea:focus,input:focus{border-color:var(--orange)}
 textarea{resize:vertical;min-height:120px;line-height:1.5}
 .field-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start}
 .resource{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:12px;
   border:1px solid var(--border);
   background:var(--panel-2);
   border-radius:8px;
-  padding:10px 12px;
-  margin-bottom:8px;
+  padding:14px;
+  margin-bottom:10px;
 }
-.resource a{color:var(--text);font-weight:700;text-decoration:none;font-size:13px}
-.resource span{color:var(--faint);font-size:12px}
+.resource-source{color:var(--faint);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.resource-title{color:var(--text);font-size:15px;font-weight:800;margin-bottom:6px}
+.resource-description{color:var(--dim);font-size:13px;line-height:1.55;margin-bottom:12px}
+.resource a{color:var(--orange);font-weight:800;text-decoration:none;font-size:13px}
 .toast{
   position:fixed;
   right:18px;
@@ -485,23 +483,55 @@ function renderOverview(body, topic){
   `;
 }
 
-async function renderResources(body, topic){
-  body.innerHTML = '<div class="empty">Discovering current resources with AI search...</div>';
+function renderResources(body, topic){
+  const resources = topicResources(topic);
+  body.innerHTML = `
+    <div class="workspace-head">
+      <div>
+        <div class="section-title" style="margin-top:0">Resources</div>
+        ${resources.length ? '<div class="small">Cached resources for this topic.</div>' : '<div class="small">No resources loaded.</div>'}
+      </div>
+      <button class="btn primary" id="resourceSearchBtn">${resources.length ? 'Refresh Resources' : 'Find Resources'}</button>
+    </div>
+    <div id="resourceResults">${resources.length ? resourceCards(resources) : '<div class="empty">No resources loaded.</div>'}</div>
+  `;
+  document.getElementById('resourceSearchBtn').addEventListener('click',()=>findResources(body, topic, resources.length > 0));
+}
+
+async function findResources(body, topic, refresh){
+  const results = document.getElementById('resourceResults');
+  const button = document.getElementById('resourceSearchBtn');
+  button.disabled = true;
+  button.textContent = refresh ? 'Refreshing...' : 'Finding...';
+  results.innerHTML = '<div class="empty">Finding resources...</div>';
   try{
-    const response = await apiRequest(`/api/topics/${topic.id}/resources`);
+    const response = await apiRequest(`/api/topics/${topic.id}/resources${refresh ? '?refresh=true' : ''}`);
     const payload = await readApiJson(response, 'Resource discovery failed');
     topic.resources = payload.resources;
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
   }catch(error){
-    body.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+    results.innerHTML = `<div class="empty">${escapeHtml(error.message)}<div style="height:12px"></div><button class="btn" id="retryResourcesBtn">Retry</button></div>`;
+    document.getElementById('retryResourcesBtn').addEventListener('click',()=>findResources(body, topic, refresh));
+    button.disabled = false;
+    button.textContent = refresh ? 'Refresh Resources' : 'Find Resources';
     return;
   }
-  const resources = [...(topic.resources.static||[]), ...(topic.resources.dynamic||[])];
-  body.innerHTML = resources.length ? resources.map(resource=>`
+  const resources = topicResources(topic);
+  results.innerHTML = resources.length ? resourceCards(resources) : '<div class="empty">No suitable resources were found for this topic.</div>';
+  button.disabled = false;
+  button.textContent = resources.length ? 'Refresh Resources' : 'Find Resources';
+}
+
+function topicResources(topic){ return [...(topic.resources?.static||[]), ...(topic.resources?.dynamic||[])]; }
+function resourceCards(resources){
+  return resources.map(resource=>`
     <div class="resource">
-      <div><a href="${escapeAttr(resource.url || '#')}" target="_blank" rel="noreferrer">${escapeHtml(resource.title || resource.url || 'Resource')}</a></div>
-      <span>${escapeHtml(resource.type || 'resource')}</span>
+      <div class="resource-source">${escapeHtml(resource.source || resource.type || hostFor(resource.url) || 'Resource')}</div>
+      <div class="resource-title">${escapeHtml(resource.title || resource.url || 'Resource')}</div>
+      <div class="resource-description">${escapeHtml(resource.description || resource.reason || 'Useful supporting material for this topic.')}</div>
+      <a href="${escapeAttr(resource.url || '#')}" target="_blank" rel="noreferrer">Open</a>
     </div>
-  `).join('') : '<div class="empty">No resources yet.</div>';
+  `).join('');
 }
 
 function renderChat(body, topic){
@@ -541,6 +571,7 @@ function renderNotes(body, topic){
 function criteriaFor(topic){ return [...(topic.successCriteria||[]), ...(topic.deliverables||[]), ...(topic.objectives||[])].filter(Boolean).length ? [...(topic.successCriteria||[]), ...(topic.deliverables||[]), ...(topic.objectives||[])].filter(Boolean) : [topic.name]; }
 function list(items){ return items && items.length ? `<ul>${items.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p>None stored.</p>'; }
 function labelStatus(status){ return ({complete:'Complete',partial:'Partial',not_verified:'Not Verified',missing:'Missing'})[status] || status; }
+function hostFor(url){ try{ return new URL(url).hostname.replace(/^www\./,''); }catch{ return ''; } }
 function escapeHtml(value){ const div=document.createElement('div'); div.textContent=value == null ? '' : String(value); return div.innerHTML; }
 function escapeAttr(value){ return escapeHtml(value).replace(/"/g,'&quot;'); }
 function showToast(message){ const toast=document.getElementById('toast'); toast.textContent=message; toast.style.display='block'; setTimeout(()=>toast.style.display='none',3600); }

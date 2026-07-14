@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { messageForApiError, statusForApiError } from '../api/index.js';
 import { mentorWithAI } from '../lib/ai.js';
+import { dynamicResourcesFor } from '../lib/curriculum.js';
 import { readApiJson } from '../public/client-response.js';
 
 function response(body, { status = 200, headers = {} } = {}) {
@@ -147,6 +148,50 @@ test('Chat AI success parses structured output', async () => {
   const result = await mentorWithAI(chatState(), 'topic-1', 'hello');
   assert.equal(result.reply, 'Keep going.');
   assert.deepEqual(result.recommendedActions, ['Write tests']);
+  globalThis.fetch = previousFetch;
+  if (previousKey) process.env.OPENAI_API_KEY = previousKey;
+  else delete process.env.OPENAI_API_KEY;
+});
+
+test('resource discovery returns three contextual resources and uses cached results', async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENAI_API_KEY = 'test-key';
+  let requestCount = 0;
+  let requestBody = null;
+  globalThis.fetch = async (url, options) => {
+    requestCount += 1;
+    requestBody = JSON.parse(options.body);
+    assert.equal(url, 'https://api.openai.com/v1/responses');
+    return response(JSON.stringify({
+      output_text: JSON.stringify({
+        resources: [
+          { title: 'poll(2)', source: 'man7.org', description: 'Linux manual for poll.', url: 'https://man7.org/linux/man-pages/man2/poll.2.html', type: 'manual', reason: 'Official Linux documentation.' },
+          { title: 'Beej Sockets', source: "Beej's Guide", description: 'Socket programming fundamentals.', url: 'https://beej.us/guide/bgnet/', type: 'guide', reason: 'Strong educational guide.' },
+          { title: 'RFC 1459', source: 'IETF', description: 'Original IRC protocol RFC.', url: 'https://www.rfc-editor.org/rfc/rfc1459', type: 'rfc', reason: 'Protocol reference.' }
+        ]
+      })
+    }));
+  };
+  const topic = { id: 'socket-basics', name: 'Socket Basics', successCriteria: ['Create sockets'], resources: { static: [], dynamic: [] } };
+  const curriculum = {
+    title: '42 ft_irc',
+    phases: [{ id: 'networking', name: 'Networking', projects: [], topics: [topic] }]
+  };
+
+  const first = await dynamicResourcesFor(topic, curriculum);
+  const second = await dynamicResourcesFor(topic, curriculum);
+
+  assert.equal(first.searched, true);
+  assert.equal(second.searched, false);
+  assert.equal(second.resources.dynamic.length, 3);
+  assert.equal(requestCount, 1);
+  assert.match(requestBody.input[0].content[0].text, /42 ft_irc/);
+  assert.match(requestBody.input[0].content[0].text, /Socket Basics/);
+
+  await dynamicResourcesFor(topic, curriculum, { refresh: true });
+  assert.equal(requestCount, 2);
+
   globalThis.fetch = previousFetch;
   if (previousKey) process.env.OPENAI_API_KEY = previousKey;
   else delete process.env.OPENAI_API_KEY;
