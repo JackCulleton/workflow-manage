@@ -1,6 +1,7 @@
 import { addPhase, addTopic, updateTopic, validateState } from '../lib/workflow.js';
 import {
   auditTopic,
+  auditRepository,
   calculateProgress,
   dynamicResourcesFor,
   ensureCurriculumState,
@@ -195,6 +196,12 @@ export default async function handler(req, res) {
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { progress: state.progress });
+    }
+    if (req.method === 'POST' && path === '/repository/audit') {
+      const result = await auditRepository(state, req.body || {});
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, result);
     }
 
     if (req.method === 'POST' && path === '/phases') {

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateImportPayload } from '../api/index.js';
-import { mentorWithAI } from '../lib/ai.js';
-import { validateCurriculumRoadmap } from '../lib/curriculum.js';
+import { mentorWithAI, parseCurriculumWithAI } from '../lib/ai.js';
+import { collectRepositoryContext, validateCurriculumRoadmap } from '../lib/curriculum.js';
 import { readApiJson } from '../public/client-response.js';
 
 function response(body, { status = 200, headers = {} } = {}) {
@@ -75,6 +75,77 @@ test('validates valid, oversized, malformed, and invalid PDF payloads', () => {
 test('validates empty and valid extracted text payloads', () => {
   assert.throws(() => validateImportPayload({ text: '' }), /required/);
   assert.doesNotThrow(() => validateImportPayload({ text: 'Phase One\nTopic Setup' }));
+});
+
+test('PDF imports send the full data URL to the AI file input', async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENAI_API_KEY = 'test-key';
+  let requestBody = null;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.openai.com/v1/responses');
+    requestBody = JSON.parse(options.body);
+    return response(JSON.stringify({
+      output_text: JSON.stringify({
+        title: 'PDF Plan',
+        sourceName: 'curriculum.pdf',
+        phases: [{
+          name: 'Phase',
+          projects: [],
+          topics: [{
+            name: 'Topic',
+            description: '',
+            objectives: [],
+            deliverables: [],
+            successCriteria: [],
+            keywords: [],
+            glossary: [],
+            resources: []
+          }]
+        }],
+        glossary: [],
+        resources: []
+      })
+    }));
+  };
+
+  await parseCurriculumWithAI({
+    fileName: 'curriculum.pdf',
+    mimeType: 'application/pdf',
+    fileData: 'data:application/pdf;base64,JVBERi0='
+  });
+
+  const fileInput = requestBody.input[0].content.find((item) => item.type === 'input_file');
+  assert.equal(fileInput.file_data, 'data:application/pdf;base64,JVBERi0=');
+  globalThis.fetch = previousFetch;
+  if (previousKey) process.env.OPENAI_API_KEY = previousKey;
+  else delete process.env.OPENAI_API_KEY;
+});
+
+test('repository context loads files from the repository default branch', async () => {
+  const previousFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).endsWith('/repos/octo/demo')) {
+      return response(JSON.stringify({ description: 'Demo', language: 'JS', topics: [], default_branch: 'trunk' }));
+    }
+    if (String(url).endsWith('/repos/octo/demo/readme')) return response('Readme');
+    if (String(url).endsWith('/repos/octo/demo/git/trees/trunk?recursive=1')) {
+      return response(JSON.stringify({ tree: [{ type: 'blob', path: 'index.js', size: 12, sha: 'abc' }] }));
+    }
+    if (String(url).endsWith('/repos/octo/demo/git/blobs/abc')) {
+      return response(JSON.stringify({ encoding: 'base64', content: Buffer.from('console.log(1)').toString('base64') }));
+    }
+    return response('', { status: 404 });
+  };
+
+  const context = await collectRepositoryContext('octo/demo');
+  assert.equal(context.defaultBranch, 'trunk');
+  assert.equal(context.files[0].path, 'index.js');
+  assert.ok(urls.some((url) => url.endsWith('/git/trees/trunk?recursive=1')));
+  assert.ok(!urls.some((url) => url.endsWith('/git/trees/HEAD?recursive=1')));
+  globalThis.fetch = previousFetch;
 });
 
 test('validates generated roadmap schema', () => {

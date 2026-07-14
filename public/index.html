@@ -442,6 +442,27 @@ async function persist(){
 }
 function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(persist,350); }
 
+async function calculateRepositoryProgress(repositoryUrl){
+  if(!repositoryUrl){ showToast('Repository is required.'); return; }
+  state.repository = { url: repositoryUrl };
+  render();
+  showToast('Calculating repository progress...');
+  try{
+    const response = await apiRequest('/api/repository/audit', {
+      method:'POST',
+      body:JSON.stringify({repositoryUrl})
+    });
+    const payload = await readApiJson(response, 'Repository progress failed');
+    state = migrate(payload.workflow);
+    state.progress = payload.progress || calculateProgress(state);
+    localStorage.setItem(STATE_KEY, JSON.stringify(state));
+    showToast(`Repository progress calculated: ${state.progress.overall}% complete.`);
+  }catch(error){
+    showToast(error.message);
+  }
+  render();
+}
+
 function render(){
   state.progress = calculateProgress(state);
   document.getElementById('title').textContent = state.curriculum?.title || state.title || 'Mountain Scope';
@@ -678,7 +699,11 @@ document.getElementById('importBtn').addEventListener('click',importCurriculum);
 document.getElementById('saveBtn').addEventListener('click',()=>persist().then(()=>showToast('Saved.')));
 document.getElementById('editRepo').addEventListener('click',()=>{
   const value = prompt('GitHub repository URL or owner/repo:', state.repository?.url || '');
-  if(value !== null){ state.repository = value.trim() ? {url:value.trim()} : null; scheduleSave(); render(); }
+  if(value !== null){
+    const repositoryUrl = value.trim();
+    if(repositoryUrl) calculateRepositoryProgress(repositoryUrl);
+    else { state.repository = null; scheduleSave(); render(); }
+  }
 });
 document.getElementById('curriculumFile').addEventListener('change',event=>{
   const file = event.target.files[0];
