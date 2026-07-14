@@ -115,3 +115,32 @@ test('preserves explicit topic activities during curriculum normalisation', () =
   }]);
   assert.equal(workflow.curriculum.phases[0].topics[0].successCriteria[0], 'Review required features');
 });
+
+test('preserves team members and phase/topic assignments', () => {
+  const workflow = {
+    title: 'Cube3D',
+    subtitle: '',
+    teamMembers: [{ id: 'member-jack', name: 'Jack', color: '#f97316' }],
+    phases: [{
+      id: 'phase-1',
+      name: 'Scope',
+      assignedMemberIds: ['member-jack'],
+      topics: [{
+        id: 'topic-1',
+        name: 'Requirements',
+        status: 'not_verified',
+        assignedMemberIds: ['member-jack'],
+        successCriteria: ['Checklist exists']
+      }]
+    }]
+  };
+
+  ensureCurriculumState(workflow);
+  validateState(workflow);
+
+  assert.deepEqual(workflow.teamMembers, [{ id: 'member-jack', name: 'Jack', color: '#f97316' }]);
+  assert.deepEqual(workflow.curriculum.phases[0].assignedMemberIds, ['member-jack']);
+  assert.deepEqual(workflow.curriculum.phases[0].topics[0].assignedMemberIds, ['member-jack']);
+  assert.deepEqual(workflow.phases[0].assignedMemberIds, ['member-jack']);
+  assert.deepEqual(workflow.phases[0].topics[0].assignedMemberIds, ['member-jack']);
+});

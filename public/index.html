@@ -91,6 +91,78 @@ header{
   box-shadow:0 18px 48px rgba(0,0,0,.22);
 }
 .roadmap-panel{padding:18px 18px 16px}
+.team-filter-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:16px;
+  color:var(--dim);
+  font-size:13px;
+  font-weight:800;
+}
+.team-selector{position:relative;display:inline-block}
+.team-button{
+  min-width:190px;
+  border:1px solid rgba(255,255,255,.07);
+  background:var(--panel-2);
+  color:var(--text);
+  border-radius:999px;
+  padding:9px 13px;
+  font-size:13px;
+  font-weight:800;
+  cursor:pointer;
+  text-align:left;
+}
+.team-menu,.assignment-menu{
+  position:absolute;
+  background:var(--panel-2);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  padding:8px;
+  z-index:20;
+  display:none;
+  min-width:240px;
+  box-shadow:0 18px 40px rgba(0,0,0,.35);
+}
+.team-menu{top:calc(100% + 8px);left:0}
+.assignment-menu{position:fixed}
+.team-menu.open,.assignment-menu.open{display:block}
+.team-option,.assignment-option{
+  width:100%;
+  border:none;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  padding:9px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:700;
+}
+.team-option:hover,.assignment-option:hover{background:var(--panel-3)}
+.team-option.active{color:var(--orange)}
+.team-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+.member-delete{width:28px;height:28px;padding:0}
+.assignment-trigger{
+  border:1px solid rgba(255,255,255,.06);
+  background:var(--panel-3);
+  color:var(--dim);
+  border-radius:999px;
+  padding:5px 8px;
+  min-height:28px;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+}
+.assignment-trigger:hover{border-color:var(--orange);color:var(--orange)}
+.assignment-dots{display:inline-flex;align-items:center;gap:4px;min-width:14px}
+.member-dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.55);
+  display:inline-block;
+}
 .roadmap-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
 .roadmap-title{font-size:13px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
 .roadmap-stats{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
@@ -341,6 +413,28 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
   max-width:420px;
   font-size:13px;
 }
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.58);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:30;
+  padding:18px;
+}
+.modal-backdrop.open{display:flex}
+.modal{
+  width:min(420px,100%);
+  background:var(--panel);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  padding:18px;
+  box-shadow:0 24px 70px rgba(0,0,0,.42);
+}
+.modal h2{font-size:18px;margin-bottom:12px}
+.modal-field{display:grid;gap:7px;margin-bottom:12px;color:var(--dim);font-size:12px;font-weight:800}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 .empty{color:var(--faint);font-size:13px;line-height:1.7;text-align:center;padding:34px 10px}
 .small{font-size:12px;color:var(--faint);line-height:1.5}
 .add-row{width:100%;margin-top:8px}
@@ -389,6 +483,13 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 
   <main class="grid">
     <section class="panel roadmap-panel">
+      <div class="team-filter-bar">
+        <span>Viewing:</span>
+        <div class="team-selector">
+          <button class="team-button" id="teamButton">All Team Members ▼</button>
+          <div class="team-menu" id="teamMenu"></div>
+        </div>
+      </div>
       <div class="roadmap-head">
         <div>
           <div class="roadmap-title">Roadmap</div>
@@ -418,6 +519,24 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="assignment-menu" id="assignmentMenu"></div>
+<div class="modal-backdrop" id="teamModal" role="dialog" aria-modal="true" aria-labelledby="teamModalTitle">
+  <div class="modal">
+    <h2 id="teamModalTitle">Add Team Member</h2>
+    <label class="modal-field">
+      Team member name
+      <input id="teamNameInput" type="text" autocomplete="off">
+    </label>
+    <label class="modal-field">
+      Colour
+      <input id="teamColorInput" type="color" value="#f97316">
+    </label>
+    <div class="modal-actions">
+      <button class="btn" id="teamCancelBtn">Cancel</button>
+      <button class="btn primary" id="teamAddBtn">Add</button>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import { readApiJson } from './client-response.js';
@@ -429,16 +548,18 @@ const TOPIC_STATES = ['complete','partial','not_verified','missing'];
 let state = null;
 let selectedTopicId = null;
 let selectedPhaseId = null;
+let selectedTeamMemberId = null;
 let saveTimer = null;
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function now(){ return new Date().toISOString(); }
+const MEMBER_COLORS = ['#f97316','#22c55e','#38bdf8','#a78bfa','#f43f5e','#eab308','#14b8a6'];
 
 function blankTopic(name){
   return {
     id: uid(), name, description:'', objectives:[], deliverables:[], successCriteria:[name],
     keywords:name.toLowerCase().split(/\s+/).filter(w=>w.length>2), glossary:[],
-    resources:{ static:[], dynamic:[] }, status:'not_verified', completion:0,
+    resources:{ static:[], dynamic:[] }, status:'not_verified', completion:0, assignedMemberIds:[],
     notes:'', chatHistory:[], manualOverride:null
   };
 }
@@ -463,6 +584,7 @@ function projectFromRoot(input){
     id:input.activeProjectId || uid(),
     title:input.curriculum?.title || input.title || 'Mountain Scope',
     subtitle:input.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.',
+    teamMembers:normaliseTeamMembers(input.teamMembers),
     curriculum:input.curriculum,
     phases:input.phases || [],
     progress:input.progress || null
@@ -471,7 +593,59 @@ function projectFromRoot(input){
 
 function blankProject(title){
   const curriculum = { id:uid(), title, source:{name:'Manual project',type:'manual',importedAt:now()}, phases:[], glossary:[], resources:[], versionHistory:[] };
-  return { id:uid(), title, subtitle:'Curriculum-driven learning roadmap with evidence-based progress.', curriculum, phases:[], progress:null };
+  return { id:uid(), title, subtitle:'Curriculum-driven learning roadmap with evidence-based progress.', teamMembers:[], curriculum, phases:[], progress:null };
+}
+
+function normaliseTeamMembers(members){
+  if(!Array.isArray(members)) return [];
+  const seen = new Set();
+  return members.filter(member=>member && member.name).map((member,index)=>{
+    const id = member.id || `member-${uid()}`;
+    if(seen.has(id)) return null;
+    seen.add(id);
+    return { id, name:String(member.name).trim(), color:member.color || MEMBER_COLORS[index % MEMBER_COLORS.length] };
+  }).filter(member=>member && member.name);
+}
+
+function teamMembers(){ return normaliseTeamMembers(state.teamMembers); }
+function selectedMember(){ return teamMembers().find(member=>member.id===selectedTeamMemberId) || null; }
+function memberById(id){ return teamMembers().find(member=>member.id===id); }
+function memberIdsFor(item){ return Array.isArray(item?.assignedMemberIds) ? item.assignedMemberIds.filter(id=>memberById(id)) : []; }
+function isAssignedTo(item, memberId){ return memberIdsFor(item).includes(memberId); }
+function phaseMatchesMember(phase, memberId){ return isAssignedTo(phase, memberId) || phaseTopics(phase).some(topic=>isAssignedTo(topic, memberId)); }
+function topicsForVisiblePhase(phase){
+  if(!selectedTeamMemberId || isAssignedTo(phase, selectedTeamMemberId)) return phaseTopics(phase);
+  return phaseTopics(phase).filter(topic=>isAssignedTo(topic, selectedTeamMemberId));
+}
+function visiblePhases(){
+  const phases = state.curriculum?.phases || [];
+  if(!selectedTeamMemberId) return phases;
+  return phases.filter(phase=>phaseMatchesMember(phase, selectedTeamMemberId));
+}
+function ensureVisibleSelection(){
+  const phases = visiblePhases();
+  if(!phases.length){
+    selectedPhaseId = null;
+    selectedTopicId = null;
+    return;
+  }
+  let phase = phases.find(item=>item.id===selectedPhaseId);
+  if(!phase){
+    phase = phases[0];
+    selectedPhaseId = phase.id;
+  }
+  const topics = topicsForVisiblePhase(phase);
+  if(!topics.some(topic=>topic.id===selectedTopicId)){
+    selectedTopicId = topics[0]?.id || null;
+  }
+}
+function assignmentDots(item){
+  const ids = memberIdsFor(item);
+  if(!ids.length) return '<span class="small">Assign</span>';
+  return `<span class="assignment-dots">${ids.map(id=>{
+    const member = memberById(id);
+    return `<span class="member-dot" style="background:${escapeAttr(member.color)}" title="${escapeAttr(member.name)}" aria-label="${escapeAttr(member.name)}"></span>`;
+  }).join('')}</span>`;
 }
 
 function apiRequest(url, options={}){
@@ -507,16 +681,18 @@ function migrate(input){
   if(!next.curriculum){
     next.curriculum = {
       id:uid(), title:next.title || 'Mountain Scope', source:{name:'Migrated workflow',type:'legacy',importedAt:now()},
-      phases:(next.phases||[]).map(p=>({ id:p.id||uid(), name:p.name, projects:[], topics:(p.topics||[]).map(t=>enrichTopic(t)) })),
+      phases:(next.phases||[]).map(p=>({ id:p.id||uid(), name:p.name, assignedMemberIds:Array.isArray(p.assignedMemberIds)?p.assignedMemberIds:[], projects:[], topics:(p.topics||[]).map(t=>enrichTopic(t)) })),
       glossary:[], resources:[], versionHistory:[]
     };
   }
   next.curriculum.phases.forEach(p=>{
     if(!p.projects) p.projects = [];
+    if(!Array.isArray(p.assignedMemberIds)) p.assignedMemberIds = [];
     p.topics = (p.topics||[]).map(enrichTopic);
     p.projects.forEach(project=>{ project.topics = (project.topics||[]).map(enrichTopic); });
   });
   next.phases = next.curriculum.phases.map(p=>({ id:p.id, name:p.name, topics:phaseTopics(p), documents:[] }));
+  next.teamMembers = normaliseTeamMembers(next.teamMembers);
   next.progress = calculateProgress(next);
   ensureProjects(next);
   applyActiveProject(next);
@@ -540,6 +716,7 @@ function captureActiveProject(){
   if(!project) return;
   project.title = state.curriculum?.title || state.title || project.title;
   project.subtitle = state.subtitle || project.subtitle || '';
+  project.teamMembers = normaliseTeamMembers(state.teamMembers);
   project.curriculum = state.curriculum;
   project.phases = state.phases;
   project.progress = state.progress;
@@ -549,13 +726,15 @@ function applyActiveProject(next=state){
   if(!project) return;
   project.curriculum.phases.forEach(phase=>{
     if(!phase.projects) phase.projects = [];
+    if(!Array.isArray(phase.assignedMemberIds)) phase.assignedMemberIds = [];
     phase.topics = (phase.topics||[]).map(enrichTopic);
     phase.projects.forEach(projectItem=>{ projectItem.topics = (projectItem.topics||[]).map(enrichTopic); });
   });
   next.title = project.title;
   next.subtitle = project.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.';
+  next.teamMembers = normaliseTeamMembers(project.teamMembers);
   next.curriculum = project.curriculum;
-  next.phases = next.curriculum.phases.map(phase=>({ id:phase.id, name:phase.name, description:phase.description||'', topics:phaseTopics(phase), documents:[] }));
+  next.phases = next.curriculum.phases.map(phase=>({ id:phase.id, name:phase.name, description:phase.description||'', assignedMemberIds:phase.assignedMemberIds||[], topics:phaseTopics(phase), documents:[] }));
   next.progress = calculateProgress(next);
 }
 
@@ -565,6 +744,7 @@ function syncRootIntoActiveProject(next){
   if(!project) return next;
   project.title = next.curriculum?.title || next.title || project.title;
   project.subtitle = next.subtitle || project.subtitle || '';
+  project.teamMembers = normaliseTeamMembers(next.teamMembers);
   project.curriculum = next.curriculum;
   project.phases = next.phases;
   project.progress = next.progress;
@@ -574,6 +754,7 @@ function syncRootIntoActiveProject(next){
 function enrichTopic(t){
   return {
     id:t.id||uid(), name:t.name||'Untitled Topic', description:t.description||'',
+    activities:t.activities||[], assignedMemberIds:Array.isArray(t.assignedMemberIds)?t.assignedMemberIds:[],
     objectives:t.objectives||[], deliverables:t.deliverables||[], successCriteria:t.successCriteria||t.activities||[],
     keywords:t.keywords||[], glossary:t.glossary||[], resources:t.resources||{static:[],dynamic:[]},
     status:normaliseStatus(t.status), completion:typeof t.completion==='number'?t.completion:undefined,
@@ -591,7 +772,10 @@ function normaliseStatus(status){
 function phaseTopics(phase){ return [...(phase.topics||[]), ...(phase.projects||[]).flatMap(p=>p.topics||[])]; }
 function allTopics(){ return (state?.curriculum?.phases||[]).flatMap(phaseTopics); }
 function selectedTopic(){ return allTopics().find(t=>t.id===selectedTopicId) || null; }
-function selectedPhase(){ return (state?.curriculum?.phases||[]).find(phase=>phase.id===selectedPhaseId) || (selectedTopicId && phaseForTopic(selectedTopicId)) || (state?.curriculum?.phases||[])[0] || null; }
+function selectedPhase(){
+  const phases = selectedTeamMemberId ? visiblePhases() : (state?.curriculum?.phases||[]);
+  return phases.find(phase=>phase.id===selectedPhaseId) || (selectedTopicId && phases.find(phase=>phaseTopics(phase).some(topic=>topic.id===selectedTopicId))) || phases[0] || null;
+}
 function phaseForTopic(topicId){ return (state?.curriculum?.phases||[]).find(phase=>phaseTopics(phase).some(topic=>topic.id===topicId)) || null; }
 function topicCompletion(topic){
   if(topic.manualOverride?.completed) return 100;
@@ -690,6 +874,118 @@ const ProjectSelector = {
   }
 };
 
+const TeamSelector = {
+  render(){
+    if(selectedTeamMemberId && !selectedMember()) selectedTeamMemberId = null;
+    const member = selectedMember();
+    document.getElementById('teamButton').textContent = `${member ? member.name : 'All Team Members'} ▼`;
+    const menu = document.getElementById('teamMenu');
+    const members = teamMembers();
+    menu.innerHTML = `
+      <button class="team-option ${!selectedTeamMemberId?'active':''}" data-action="all">All Team Members</button>
+      ${members.map(member=>`
+        <div class="team-row">
+          <button class="team-option ${member.id===selectedTeamMemberId?'active':''}" data-member-id="${member.id}">
+            <span class="member-dot" style="background:${escapeAttr(member.color)}"></span>
+            ${escapeHtml(member.name)}
+          </button>
+          <button class="btn member-delete" data-delete-member="${member.id}" title="Delete ${escapeAttr(member.name)}">×</button>
+        </div>
+      `).join('')}
+      <button class="team-option" data-action="add">Add Team Member</button>
+    `;
+    menu.querySelector('[data-action="all"]').addEventListener('click',()=>{ selectedTeamMemberId=null; this.close(); render(); });
+    menu.querySelectorAll('[data-member-id]').forEach(btn=>btn.addEventListener('click',()=>{ selectedTeamMemberId=btn.dataset.memberId; this.close(); render(); }));
+    menu.querySelector('[data-action="add"]').addEventListener('click',()=>{ this.close(); openTeamModal(); });
+    menu.querySelectorAll('[data-delete-member]').forEach(btn=>btn.addEventListener('click',event=>{
+      event.stopPropagation();
+      removeTeamMember(btn.dataset.deleteMember);
+    }));
+  },
+  toggle(){ document.getElementById('teamMenu').classList.toggle('open'); closeAssignmentMenu(); },
+  close(){ document.getElementById('teamMenu').classList.remove('open'); }
+};
+
+function openTeamModal(){
+  const modal = document.getElementById('teamModal');
+  const input = document.getElementById('teamNameInput');
+  const color = document.getElementById('teamColorInput');
+  input.value = '';
+  color.value = MEMBER_COLORS[teamMembers().length % MEMBER_COLORS.length];
+  modal.classList.add('open');
+  input.focus();
+}
+
+function closeTeamModal(){ document.getElementById('teamModal').classList.remove('open'); }
+
+function addTeamMember(){
+  const input = document.getElementById('teamNameInput');
+  const color = document.getElementById('teamColorInput').value || MEMBER_COLORS[teamMembers().length % MEMBER_COLORS.length];
+  const name = input.value.trim();
+  if(!name){ showToast('Team member name is required.'); return; }
+  if(teamMembers().some(member=>member.name.trim().toLowerCase()===name.toLowerCase())){ showToast('A team member with this name already exists.'); return; }
+  state.teamMembers = [...teamMembers(), { id:`member-${uid()}`, name, color }];
+  captureActiveProject();
+  closeTeamModal();
+  persist();
+  render();
+}
+
+function removeTeamMember(memberId){
+  const member = memberById(memberId);
+  if(!member) return;
+  if(!confirm(`Delete team member "${member.name}"?\n\nThis will remove their phase and topic assignments, but will not delete workflow content.`)) return;
+  state.teamMembers = teamMembers().filter(item=>item.id!==memberId);
+  (state.curriculum?.phases||[]).forEach(phase=>{
+    phase.assignedMemberIds = memberIdsFor(phase).filter(id=>id!==memberId);
+    phaseTopics(phase).forEach(topic=>{ topic.assignedMemberIds = memberIdsFor(topic).filter(id=>id!==memberId); });
+  });
+  if(selectedTeamMemberId === memberId) selectedTeamMemberId = null;
+  captureActiveProject();
+  persist();
+  render();
+}
+
+function openAssignmentMenu(type, item, anchor){
+  TeamSelector.close();
+  const menu = document.getElementById('assignmentMenu');
+  const members = teamMembers();
+  if(!members.length){
+    menu.innerHTML = '<button class="assignment-option" data-action="add">Add Team Member</button>';
+  }else{
+    menu.innerHTML = `
+      <div class="small" style="padding:6px 10px">${type === 'phase' ? 'Phase' : 'Topic'} assignments</div>
+      ${members.map(member=>`
+        <button class="assignment-option" data-member-id="${member.id}">
+          ${isAssignedTo(item, member.id) ? '✓' : '○'}
+          <span class="member-dot" style="background:${escapeAttr(member.color)}"></span>
+          ${escapeHtml(member.name)}
+        </button>
+      `).join('')}
+      <button class="assignment-option" data-action="add">Add Team Member</button>
+    `;
+  }
+  const rect = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
+  menu.style.top = `${rect.bottom + 8}px`;
+  menu.classList.add('open');
+  menu.querySelectorAll('[data-member-id]').forEach(btn=>btn.addEventListener('click',()=>{
+    toggleAssignment(item, btn.dataset.memberId);
+    closeAssignmentMenu();
+  }));
+  menu.querySelector('[data-action="add"]').addEventListener('click',()=>{ closeAssignmentMenu(); openTeamModal(); });
+}
+
+function closeAssignmentMenu(){ document.getElementById('assignmentMenu').classList.remove('open'); }
+
+function toggleAssignment(item, memberId){
+  const ids = memberIdsFor(item);
+  item.assignedMemberIds = ids.includes(memberId) ? ids.filter(id=>id!==memberId) : [...ids, memberId];
+  captureActiveProject();
+  persist();
+  render();
+}
+
 const PhaseService = {
   validateName(name, phaseId=null){
     const clean = name.trim();
@@ -778,6 +1074,8 @@ function render(){
   state.progress = calculateProgress(state);
   captureActiveProject();
   ProjectSelector.render();
+  TeamSelector.render();
+  ensureVisibleSelection();
   document.getElementById('subtitle').textContent = state.subtitle || 'Curriculum-driven learning roadmap with evidence-based progress.';
   document.getElementById('overall').textContent = `${state.progress.overall}%`;
   document.getElementById('overallFill').style.width = `${state.progress.overall}%`;
@@ -792,8 +1090,12 @@ function render(){
 
 function renderRoadmap(){
   const root = document.getElementById('roadmap');
-  const phases = state.curriculum?.phases || [];
+  const phases = visiblePhases();
   const currentPhase = selectedPhase();
+  if(selectedTeamMemberId && !phases.length){
+    root.innerHTML = '<div class="empty">No phases or topics are currently assigned to this team member.</div>';
+    return;
+  }
   root.innerHTML = '<div class="roadmap-shell"><div class="phase-rail"></div></div>';
   const rail = root.querySelector('.phase-rail');
   phases.forEach(phase=>{
@@ -804,6 +1106,7 @@ function renderRoadmap(){
       <div class="phase-head">
         <button class="phase-select" data-action="select-phase"><span class="phase-name">${escapeHtml(phase.name)}</span><span class="phase-progress">${phaseProgress}%</span></button>
         <div class="phase-actions">
+          <button class="assignment-trigger" data-action="phase-assign" title="Assign phase" aria-label="Assign phase">${assignmentDots(phase)}</button>
           <button class="icon-btn" data-action="phase-up" title="Move phase up">↑</button>
           <button class="icon-btn" data-action="phase-down" title="Move phase down">↓</button>
           <button class="icon-btn" data-action="phase-edit" title="Rename phase">✎</button>
@@ -811,7 +1114,8 @@ function renderRoadmap(){
         </div>
       </div>
     `;
-    wrap.querySelector('[data-action="select-phase"]').addEventListener('click',()=>{ selectedPhaseId=phase.id; selectedTopicId=phaseTopics(phase)[0]?.id || null; render(); });
+    wrap.querySelector('[data-action="select-phase"]').addEventListener('click',()=>{ selectedPhaseId=phase.id; selectedTopicId=topicsForVisiblePhase(phase)[0]?.id || null; render(); });
+    wrap.querySelector('[data-action="phase-assign"]').addEventListener('click',event=>openAssignmentMenu('phase', phase, event.currentTarget));
     wrap.querySelector('[data-action="phase-up"]').addEventListener('click',()=>PhaseService.move(phase,'up'));
     wrap.querySelector('[data-action="phase-down"]').addEventListener('click',()=>PhaseService.move(phase,'down'));
     wrap.querySelector('[data-action="phase-edit"]').addEventListener('click',()=>PhaseService.rename(phase));
@@ -846,7 +1150,11 @@ function renderTopicPanel(){
     </div>
   `;
   const grid = panel.querySelector('.topic-list-grid');
-  phaseTopics(phase).forEach(topic=>{
+  const topics = topicsForVisiblePhase(phase);
+  if(selectedTeamMemberId && !topics.length){
+    grid.innerHTML = '<div class="empty">No topics are currently assigned to this team member.</div>';
+  }
+  topics.forEach(topic=>{
     const row = document.createElement('div');
     row.className = `topic ${topic.id===selectedTopicId?'active':''}`;
     row.innerHTML = `
@@ -856,6 +1164,7 @@ function renderTopicPanel(){
         <span class="topic-score">${topicCompletion(topic)}%</span>
       </button>
       <div class="topic-actions">
+        <button class="assignment-trigger" data-action="topic-assign" title="Assign topic" aria-label="Assign topic">${assignmentDots(topic)}</button>
         <button class="icon-btn" data-action="topic-up" title="Move topic up">↑</button>
         <button class="icon-btn" data-action="topic-down" title="Move topic down">↓</button>
         <button class="icon-btn" data-action="topic-edit" title="Rename topic">✎</button>
@@ -863,6 +1172,7 @@ function renderTopicPanel(){
       </div>
     `;
     row.querySelector('.topic-select').addEventListener('click',()=>{ selectedTopicId=topic.id; render(); });
+    row.querySelector('[data-action="topic-assign"]').addEventListener('click',event=>openAssignmentMenu('topic', topic, event.currentTarget));
     row.querySelector('[data-action="topic-up"]').addEventListener('click',()=>TopicService.move(topic,'up'));
     row.querySelector('[data-action="topic-down"]').addEventListener('click',()=>TopicService.move(topic,'down'));
     row.querySelector('[data-action="topic-edit"]').addEventListener('click',()=>TopicService.rename(phase, topic));
@@ -1022,8 +1332,15 @@ function showToast(message){ const toast=document.getElementById('toast'); toast
 
 document.getElementById('saveBtn').addEventListener('click',()=>persist().then(()=>showToast('Saved.')));
 document.getElementById('projectButton').addEventListener('click',()=>ProjectSelector.toggle());
+document.getElementById('teamButton').addEventListener('click',()=>TeamSelector.toggle());
+document.getElementById('teamCancelBtn').addEventListener('click',closeTeamModal);
+document.getElementById('teamAddBtn').addEventListener('click',addTeamMember);
+document.getElementById('teamNameInput').addEventListener('keydown',event=>{ if(event.key === 'Enter') addTeamMember(); });
+document.getElementById('teamModal').addEventListener('click',event=>{ if(event.target.id === 'teamModal') closeTeamModal(); });
 document.addEventListener('click',event=>{
   if(!event.target.closest('.project-selector')) document.getElementById('projectMenu').classList.remove('open');
+  if(!event.target.closest('.team-selector')) TeamSelector.close();
+  if(!event.target.closest('.assignment-menu') && !event.target.closest('.assignment-trigger')) closeAssignmentMenu();
 });
 
 loadState();
