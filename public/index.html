@@ -58,6 +58,7 @@ h1{font-size:28px;font-weight:800;line-height:1.15}
 .btn.primary{background:var(--orange-soft);border-color:var(--orange);color:var(--orange)}
 .btn.danger:hover{border-color:var(--red);color:var(--red)}
 .grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start}
+.workspace-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
 .panel{
   background:var(--panel);
   border:1px solid var(--border);
@@ -154,9 +155,14 @@ h1{font-size:28px;font-weight:800;line-height:1.15}
 .icon-btn:hover{border-color:var(--orange);color:var(--orange)}
 .phase-name{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .phase-progress{font-size:12px;color:var(--orange);font-weight:800}
+.topic-panel{display:none;position:sticky;top:18px}
+.topic-panel.open{display:block}
+.topic-panel:not(.open)+#workspace{grid-column:1 / -1}
 .topic-list{padding-top:12px}
 .topic-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
 .topic-list-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.topic-panel .topic-list{padding-top:0}
+.topic-panel .topic-list-grid{grid-template-columns:1fr}
 .topic{
   width:100%;
   border:1px solid transparent;
@@ -283,10 +289,11 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 @media (max-width:900px){
   body{padding:18px}
   header,.workspace-head{flex-direction:column}
-  .two-col,.field-row{grid-template-columns:1fr}
+  .workspace-grid,.two-col,.field-row{grid-template-columns:1fr}
   .actions{justify-content:flex-start}
   .project-button{font-size:24px}
   .phase{min-width:165px}
+  .topic-panel{position:static}
 }
 </style>
 </head>
@@ -329,9 +336,13 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
       <div id="roadmap"></div>
     </aside>
 
-    <section class="panel" id="workspace">
-      <div class="empty">Select a topic to open the workspace.</div>
-    </section>
+    <div class="workspace-grid">
+      <aside class="panel topic-panel" id="topicPanel"></aside>
+
+      <section class="panel" id="workspace">
+        <div class="empty">Select a topic to open the workspace.</div>
+      </section>
+    </div>
   </main>
 </div>
 
@@ -704,6 +715,7 @@ function render(){
   document.getElementById('recommended').textContent = state.progress.recommendedNextTopic || 'None';
   document.getElementById('remaining').textContent = state.progress.estimatedRemainingWork;
   renderRoadmap();
+  renderTopicPanel();
   renderWorkspace();
 }
 
@@ -711,9 +723,8 @@ function renderRoadmap(){
   const root = document.getElementById('roadmap');
   const phases = state.curriculum?.phases || [];
   const currentPhase = selectedPhase();
-  root.innerHTML = '<div class="roadmap-shell"><div class="phase-rail"></div><div class="topic-list"></div></div>';
+  root.innerHTML = '<div class="roadmap-shell"><div class="phase-rail"></div></div>';
   const rail = root.querySelector('.phase-rail');
-  const topicList = root.querySelector('.topic-list');
   phases.forEach(phase=>{
     const phaseProgress = state.progress.phases.find(p=>p.id===phase.id)?.completion || 0;
     const wrap = document.createElement('div');
@@ -736,52 +747,62 @@ function renderRoadmap(){
     wrap.querySelector('[data-action="phase-delete"]').addEventListener('click',()=>PhaseService.remove(phase));
     rail.appendChild(wrap);
   });
-  const phase = currentPhase;
-  topicList.innerHTML = `
-    <div class="topic-list-head">
-      <div>
-        <div class="section-title" style="margin:0 0 4px">Topics</div>
-        <div class="small">${phase ? escapeHtml(phase.name) : 'Select or create a phase.'}</div>
-      </div>
-    </div>
-    <div class="topic-list-grid"></div>
-  `;
-  const grid = topicList.querySelector('.topic-list-grid');
-  if(phase){
-    phaseTopics(phase).forEach(topic=>{
-      const row = document.createElement('div');
-      row.className = `topic ${topic.id===selectedTopicId?'active':''}`;
-      row.innerHTML = `
-        <button class="topic-select">
-          <span class="dot ${topic.status}"></span>
-          <span class="topic-name">${escapeHtml(topic.name)}</span>
-          <span class="topic-score">${topicCompletion(topic)}%</span>
-        </button>
-        <div class="topic-actions">
-          <button class="icon-btn" data-action="topic-up" title="Move topic up">↑</button>
-          <button class="icon-btn" data-action="topic-down" title="Move topic down">↓</button>
-          <button class="icon-btn" data-action="topic-edit" title="Rename topic">✎</button>
-          <button class="icon-btn" data-action="topic-delete" title="Delete topic">×</button>
-        </div>
-      `;
-      row.querySelector('.topic-select').addEventListener('click',()=>{ selectedTopicId=topic.id; activeTab='overview'; render(); });
-      row.querySelector('[data-action="topic-up"]').addEventListener('click',()=>TopicService.move(topic,'up'));
-      row.querySelector('[data-action="topic-down"]').addEventListener('click',()=>TopicService.move(topic,'down'));
-      row.querySelector('[data-action="topic-edit"]').addEventListener('click',()=>TopicService.rename(phase, topic));
-      row.querySelector('[data-action="topic-delete"]').addEventListener('click',()=>TopicService.remove(topic));
-      grid.appendChild(row);
-    });
-    const addTopic = document.createElement('button');
-    addTopic.className = 'btn add-row';
-    addTopic.textContent = 'Add Topic';
-    addTopic.addEventListener('click',()=>TopicService.add(phase));
-    topicList.appendChild(addTopic);
-  }
   const addPhase = document.createElement('button');
   addPhase.className = 'btn primary phase-add';
   addPhase.textContent = 'Add Phase';
   addPhase.addEventListener('click',()=>PhaseService.add());
   rail.appendChild(addPhase);
+}
+
+function renderTopicPanel(){
+  const panel = document.getElementById('topicPanel');
+  const phase = selectedPhase();
+  if(!phase){
+    panel.classList.remove('open');
+    panel.innerHTML = '';
+    return;
+  }
+  panel.classList.add('open');
+  panel.innerHTML = `
+    <div class="topic-list">
+    <div class="topic-list-head">
+      <div>
+        <div class="section-title" style="margin:0 0 4px">Topics</div>
+        <div class="small">${escapeHtml(phase.name)}</div>
+      </div>
+    </div>
+    <div class="topic-list-grid"></div>
+    </div>
+  `;
+  const grid = panel.querySelector('.topic-list-grid');
+  phaseTopics(phase).forEach(topic=>{
+    const row = document.createElement('div');
+    row.className = `topic ${topic.id===selectedTopicId?'active':''}`;
+    row.innerHTML = `
+      <button class="topic-select">
+        <span class="dot ${topic.status}"></span>
+        <span class="topic-name">${escapeHtml(topic.name)}</span>
+        <span class="topic-score">${topicCompletion(topic)}%</span>
+      </button>
+      <div class="topic-actions">
+        <button class="icon-btn" data-action="topic-up" title="Move topic up">↑</button>
+        <button class="icon-btn" data-action="topic-down" title="Move topic down">↓</button>
+        <button class="icon-btn" data-action="topic-edit" title="Rename topic">✎</button>
+        <button class="icon-btn" data-action="topic-delete" title="Delete topic">×</button>
+      </div>
+    `;
+    row.querySelector('.topic-select').addEventListener('click',()=>{ selectedTopicId=topic.id; activeTab='overview'; render(); });
+    row.querySelector('[data-action="topic-up"]').addEventListener('click',()=>TopicService.move(topic,'up'));
+    row.querySelector('[data-action="topic-down"]').addEventListener('click',()=>TopicService.move(topic,'down'));
+    row.querySelector('[data-action="topic-edit"]').addEventListener('click',()=>TopicService.rename(phase, topic));
+    row.querySelector('[data-action="topic-delete"]').addEventListener('click',()=>TopicService.remove(topic));
+    grid.appendChild(row);
+  });
+  const addTopic = document.createElement('button');
+  addTopic.className = 'btn add-row';
+  addTopic.textContent = 'Add Topic';
+  addTopic.addEventListener('click',()=>TopicService.add(phase));
+  panel.querySelector('.topic-list').appendChild(addTopic);
 }
 
 function renderWorkspace(){
