@@ -50,7 +50,10 @@ function legacyWorkflowState() {
       phase('mini-phase-1', 'Scope and setup', [topic('mini-topic-1', 'Read minishell subject')]),
       phase('mini-phase-2', 'Parsing', [topic('mini-topic-2', 'Tokenization'), topic('mini-topic-3', 'Quotes')])
     ],
-    [{ id: 'member-1', name: 'Ada', color: '#f97316' }]
+    [
+      { id: 'member-1', name: 'Ada', color: '#f97316' },
+      { id: 'member-2', name: 'Grace', color: '#38bdf8' }
+    ]
   );
   return {
     title: cube.title,
@@ -205,4 +208,139 @@ test('replaceWorkflow accepts legacy input by migrating it to the selected singl
   assert.equal(response.body.workflow.project.name, 'Cube3D');
   assert.equal(Array.isArray(response.body.workflow.projects), false);
   assert.equal(response.body.workflow.migrationBackups[0].projects.length, 2);
+});
+
+test('assignMemberToPhase persists existing team-member ids without changing progress', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  const before = await callApi('GET', '/api/workflow', null, stateRef);
+  const beforeProgress = JSON.stringify(before.body.workflow.progress);
+  const beforeStatus = before.body.workflow.curriculum.phases[0].topics[0].status;
+
+  const response = await callApi('POST', '/api/assignments/phases/assign', {
+    phaseId: 'mini-phase-1',
+    memberId: 'member-1'
+  }, stateRef);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.phase.assignedMemberIds, ['member-1']);
+  assert.deepEqual(response.body.assignedMembers.map((member) => member.id), ['member-1']);
+  assert.equal(response.body.workflow.curriculum.phases[0].topics[0].status, beforeStatus);
+  assert.equal(JSON.stringify(response.body.workflow.progress), beforeProgress);
+
+  const reload = await callApi('GET', '/api/workflow', null, stateRef);
+  assert.deepEqual(reload.body.workflow.curriculum.phases.find((item) => item.id === 'mini-phase-1').assignedMemberIds, ['member-1']);
+});
+
+test('assignMemberToTopic supports multiple members and prevents duplicates', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-2', memberId: 'member-1' }, stateRef);
+  await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-2', memberId: 'member-2' }, stateRef);
+  const duplicate = await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-2', memberId: 'member-1' }, stateRef);
+
+  assert.equal(duplicate.statusCode, 200);
+  assert.deepEqual(duplicate.body.topic.assignedMemberIds, ['member-1', 'member-2']);
+  assert.deepEqual(duplicate.body.assignedMembers.map((member) => member.name), ['Ada', 'Grace']);
+});
+
+test('unassigning a member does not delete workflow content', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-2', memberId: 'member-1' }, stateRef);
+  await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-2', memberId: 'member-2' }, stateRef);
+  const beforeTopicCount = stateRef.current.curriculum.phases.flatMap((item) => item.topics).length;
+
+  const response = await callApi('POST', '/api/assignments/topics/unassign', { topicId: 'mini-topic-2', memberId: 'member-1' }, stateRef);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.topic.assignedMemberIds, ['member-2']);
+  assert.equal(stateRef.current.curriculum.phases.flatMap((item) => item.topics).length, beforeTopicCount);
+  assert.equal(stateRef.current.curriculum.phases.some((item) => item.id === 'mini-phase-2'), true);
+  assert.equal(stateRef.current.curriculum.phases.flatMap((item) => item.topics).some((item) => item.id === 'mini-topic-2'), true);
+});
+
+test('GPT-created assignments appear in getWorkflow and dashboard-shaped reads', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('POST', '/api/assignments/phases/assign', { phaseId: 'mini-phase-2', memberId: 'member-2' }, stateRef);
+  await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-3', memberId: 'member-2' }, stateRef);
+
+  const reload = await callApi('GET', '/api/workflow', null, stateRef);
+  const phase = reload.body.workflow.curriculum.phases.find((item) => item.id === 'mini-phase-2');
+  const topic = phase.topics.find((item) => item.id === 'mini-topic-3');
+
+  assert.deepEqual(phase.assignedMemberIds, ['member-2']);
+  assert.deepEqual(topic.assignedMemberIds, ['member-2']);
+  assert.deepEqual(reload.body.project.phases.find((item) => item.id === 'mini-phase-2').assignedMemberIds, ['member-2']);
+});
+
+test('frontend-created assignments submitted through replaceWorkflow appear in getWorkflow', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  const initial = await callApi('GET', '/api/workflow', null, stateRef);
+  const next = structuredClone(initial.body.workflow);
+  next.curriculum.phases.find((item) => item.id === 'mini-phase-1').assignedMemberIds = ['member-1'];
+  next.curriculum.phases.find((item) => item.id === 'mini-phase-1').topics[0].assignedMemberIds = ['member-2'];
+
+  const save = await callApi('PUT', '/api/workflow', { workflow: next }, stateRef);
+  assert.equal(save.statusCode, 200);
+
+  const reload = await callApi('GET', '/api/workflow', null, stateRef);
+  const phase = reload.body.workflow.curriculum.phases.find((item) => item.id === 'mini-phase-1');
+  assert.deepEqual(phase.assignedMemberIds, ['member-1']);
+  assert.deepEqual(phase.topics[0].assignedMemberIds, ['member-2']);
+});
+
+test('invalid assignment ids return errors without writing', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('GET', '/api/workflow', null, stateRef);
+  const before = JSON.stringify(stateRef.current);
+
+  const invalidMember = await callApi('POST', '/api/assignments/phases/assign', { phaseId: 'mini-phase-1', memberId: 'missing-member' }, stateRef);
+  assert.equal(invalidMember.statusCode, 404);
+  assert.match(invalidMember.body.error, /Team member not found/);
+
+  const invalidPhase = await callApi('POST', '/api/assignments/phases/assign', { phaseId: 'missing-phase', memberId: 'member-1' }, stateRef);
+  assert.equal(invalidPhase.statusCode, 404);
+  assert.match(invalidPhase.body.error, /Phase not found/);
+
+  const invalidTopic = await callApi('POST', '/api/assignments/topics/assign', { topicId: 'missing-topic', memberId: 'member-1' }, stateRef);
+  assert.equal(invalidTopic.statusCode, 404);
+  assert.match(invalidTopic.body.error, /Topic not found/);
+  assert.equal(JSON.stringify(stateRef.current), before);
+});
+
+test('setAssignments is atomic and validates all targets before writing', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('GET', '/api/workflow', null, stateRef);
+  const before = JSON.stringify(stateRef.current);
+
+  const invalid = await callApi('POST', '/api/assignments/batch', {
+    assignments: [
+      { targetType: 'phase', targetId: 'mini-phase-1', memberIds: ['member-1'] },
+      { targetType: 'topic', targetId: 'missing-topic', memberIds: ['member-2'] }
+    ]
+  }, stateRef);
+  assert.equal(invalid.statusCode, 404);
+  assert.equal(JSON.stringify(stateRef.current), before);
+
+  const valid = await callApi('POST', '/api/assignments/batch', {
+    assignments: [
+      { targetType: 'phase', targetId: 'mini-phase-1', memberIds: ['member-1', 'member-1'] },
+      { targetType: 'topic', targetId: 'mini-topic-1', memberIds: ['member-2'] }
+    ]
+  }, stateRef);
+
+  assert.equal(valid.statusCode, 200);
+  assert.equal(valid.body.assignments.length, 2);
+  assert.deepEqual(valid.body.assignments[0].target.assignedMemberIds, ['member-1']);
+  assert.deepEqual(valid.body.assignments[1].target.assignedMemberIds, ['member-2']);
+});
+
+test('existing workflows without assignment arrays still load with empty arrays', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  delete stateRef.current.projects[1].curriculum.phases[0].assignedMemberIds;
+  delete stateRef.current.projects[1].curriculum.phases[0].topics[0].assignedMemberIds;
+
+  const response = await callApi('GET', '/api/workflow', null, stateRef);
+  const phase = response.body.workflow.curriculum.phases.find((item) => item.id === 'mini-phase-1');
+
+  assert.deepEqual(phase.assignedMemberIds, []);
+  assert.deepEqual(phase.topics[0].assignedMemberIds, []);
 });

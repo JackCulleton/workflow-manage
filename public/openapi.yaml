@@ -317,6 +317,76 @@ paths:
                 reason: { type: string }
       responses:
         '200': { description: Manual override updated }
+  /assignments/phases/assign:
+    post:
+      operationId: assignMemberToPhase
+      summary: Assign an existing team member to an existing phase.
+      description: Assigns an existing team member to an existing phase in the dashboard's single workflow. It stores the stable member ID, prevents duplicate assignments, and does not change progress or completion status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhaseAssignmentRequest'
+      responses:
+        '200': { description: Phase assignment updated }
+  /assignments/phases/unassign:
+    post:
+      operationId: unassignMemberFromPhase
+      summary: Remove an existing team member assignment from an existing phase.
+      description: Removes an existing team member from an existing phase assignment in the dashboard's single workflow. It does not change progress, completion status, topics, or phase content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhaseAssignmentRequest'
+      responses:
+        '200': { description: Phase assignment updated }
+  /assignments/topics/assign:
+    post:
+      operationId: assignMemberToTopic
+      summary: Assign an existing team member to an existing topic.
+      description: Assigns an existing team member to an existing topic in the dashboard's single workflow. It stores the stable member ID, prevents duplicate assignments, and does not change progress or completion status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicAssignmentRequest'
+      responses:
+        '200': { description: Topic assignment updated }
+  /assignments/topics/unassign:
+    post:
+      operationId: unassignMemberFromTopic
+      summary: Remove an existing team member assignment from an existing topic.
+      description: Removes an existing team member from an existing topic assignment in the dashboard's single workflow. It does not change progress, completion status, phases, or topic content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicAssignmentRequest'
+      responses:
+        '200': { description: Topic assignment updated }
+  /assignments/batch:
+    post:
+      operationId: setAssignments
+      summary: Atomically replace assignments on existing phases or topics.
+      description: Sets team-member assignments for existing phases or topics in the dashboard's single workflow. All members and targets are validated before any write; invalid input fails without partial updates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignments]
+              properties:
+                assignments:
+                  type: array
+                  items: { $ref: '#/components/schemas/AssignmentSetItem' }
+      responses:
+        '200': { description: Assignments updated }
 components:
   schemas:
     TopicStatus:
@@ -347,6 +417,29 @@ components:
         id: { type: string }
         name: { type: string }
         color: { type: string }
+    PhaseAssignmentRequest:
+      type: object
+      required: [phaseId, memberId]
+      properties:
+        phaseId: { type: string }
+        memberId: { type: string }
+    TopicAssignmentRequest:
+      type: object
+      required: [topicId, memberId]
+      properties:
+        topicId: { type: string }
+        memberId: { type: string }
+    AssignmentSetItem:
+      type: object
+      required: [targetType, targetId, memberIds]
+      properties:
+        targetType:
+          type: string
+          enum: [phase, topic]
+        targetId: { type: string }
+        memberIds:
+          type: array
+          items: { type: string }
     Topic:
       type: object
       required: [id, name, status]

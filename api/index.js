@@ -1,4 +1,19 @@
-import { addPhase, addTopic, deletePhase, deleteTopic, movePhase, moveTopic, updatePhase, updateTopic, validateState } from '../lib/workflow.js';
+import {
+  addPhase,
+  addTopic,
+  assignMemberToPhase,
+  assignMemberToTopic,
+  deletePhase,
+  deleteTopic,
+  movePhase,
+  moveTopic,
+  setAssignments,
+  unassignMemberFromPhase,
+  unassignMemberFromTopic,
+  updatePhase,
+  updateTopic,
+  validateState
+} from '../lib/workflow.js';
 import {
   calculateProgress,
   dynamicResourcesFor,
@@ -236,7 +251,7 @@ export default async function handler(req, res) {
   const startedAt = Date.now();
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('X-Request-Id', id);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -352,6 +367,36 @@ export default async function handler(req, res) {
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { success: true, projectId: state.project.id, topicId: topicMoveMatch[1], persistence: 'stored', project: projectResponse(state), workflow: state });
+    }
+    if (req.method === 'POST' && path === '/assignments/phases/assign') {
+      const result = assignMemberToPhase(state, req.body && req.body.phaseId, req.body && req.body.memberId);
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { success: true, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+    }
+    if (req.method === 'POST' && path === '/assignments/phases/unassign') {
+      const result = unassignMemberFromPhase(state, req.body && req.body.phaseId, req.body && req.body.memberId);
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { success: true, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+    }
+    if (req.method === 'POST' && path === '/assignments/topics/assign') {
+      const result = assignMemberToTopic(state, req.body && req.body.topicId, req.body && req.body.memberId);
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { success: true, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+    }
+    if (req.method === 'POST' && path === '/assignments/topics/unassign') {
+      const result = unassignMemberFromTopic(state, req.body && req.body.topicId, req.body && req.body.memberId);
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { success: true, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+    }
+    if (req.method === 'POST' && path === '/assignments/batch') {
+      const results = setAssignments(state, req.body && req.body.assignments);
+      await writeState(state);
+      console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
+      return send(res, 200, { success: true, assignments: results, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const notesMatch = path.match(/^\/topics\/([^/]+)\/notes$/);
     if (req.method === 'PATCH' && notesMatch) {
