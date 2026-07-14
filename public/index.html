@@ -325,6 +325,7 @@ function readLocal(){
 
 function migrate(input){
   const next = input || defaultState();
+  delete next.repository;
   if(!next.curriculum){
     next.curriculum = {
       id:uid(), title:next.title || 'Mountain Scope', source:{name:'Migrated workflow',type:'legacy',importedAt:now()},
