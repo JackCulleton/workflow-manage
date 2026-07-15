@@ -231,6 +231,30 @@ test('assignMemberToPhase persists existing team-member ids without changing pro
   assert.deepEqual(reload.body.workflow.curriculum.phases.find((item) => item.id === 'mini-phase-1').assignedMemberIds, ['member-1']);
 });
 
+test('assignment actions validate supplied projectId without falling back', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('GET', '/api/workflow', null, stateRef);
+
+  const matching = await callApi('POST', '/api/assignments/phases/assign', {
+    projectId: '4u4nqhe5',
+    phaseId: 'mini-phase-1',
+    memberId: 'member-1'
+  }, stateRef);
+  assert.equal(matching.statusCode, 200);
+  assert.deepEqual(matching.body.phase.assignedMemberIds, ['member-1']);
+
+  const before = JSON.stringify(stateRef.current);
+  const mismatched = await callApi('POST', '/api/assignments/topics/assign', {
+    projectId: 'cube-id',
+    topicId: 'mini-topic-1',
+    memberId: 'member-1'
+  }, stateRef);
+
+  assert.equal(mismatched.statusCode, 400);
+  assert.match(mismatched.body.error, /projectId does not match/);
+  assert.equal(JSON.stringify(stateRef.current), before);
+});
+
 test('assignMemberToTopic supports multiple members and prevents duplicates', async () => {
   const stateRef = { current: legacyWorkflowState() };
   await callApi('POST', '/api/assignments/topics/assign', { topicId: 'mini-topic-2', memberId: 'member-1' }, stateRef);
@@ -379,6 +403,23 @@ test('setAssignments is atomic and validates all targets before writing', async 
   assert.deepEqual(valid.body.assignments[1].target.assignedMemberIds, ['member-2']);
 });
 
+test('setAssignments validates projectId before writing any assignment', async () => {
+  const stateRef = { current: legacyWorkflowState() };
+  await callApi('GET', '/api/workflow', null, stateRef);
+  const before = JSON.stringify(stateRef.current);
+
+  const invalid = await callApi('POST', '/api/assignments/batch', {
+    projectId: 'cube-id',
+    assignments: [
+      { targetType: 'phase', targetId: 'mini-phase-1', memberIds: ['member-1'] }
+    ]
+  }, stateRef);
+
+  assert.equal(invalid.statusCode, 400);
+  assert.match(invalid.body.error, /projectId does not match/);
+  assert.equal(JSON.stringify(stateRef.current), before);
+});
+
 test('setAssignments can use member names and target names', async () => {
   const stateRef = { current: legacyWorkflowState() };
   const response = await callApi('POST', '/api/assignments/batch', {
@@ -403,4 +444,38 @@ test('existing workflows without assignment arrays still load with empty arrays'
 
   assert.deepEqual(phase.assignedMemberIds, []);
   assert.deepEqual(phase.topics[0].assignedMemberIds, []);
+});
+
+test('legacy workflows without ids get stable ids persisted after first read', async () => {
+  const stateRef = { current: {
+    title: 'Legacy',
+    subtitle: '',
+    teamMembers: [{ name: 'No Id Member', color: '#f97316' }],
+    phases: [{
+      name: 'No Id Phase',
+      topics: [{ name: 'No Id Topic', status: 'not_verified', successCriteria: ['Exists'] }]
+    }]
+  } };
+
+  const first = await callApi('GET', '/api/workflow', null, stateRef);
+  const ids = {
+    project: first.body.workflow.project.id,
+    member: first.body.workflow.teamMembers[0].id,
+    phase: first.body.workflow.curriculum.phases[0].id,
+    topic: first.body.workflow.curriculum.phases[0].topics[0].id
+  };
+  const second = await callApi('GET', '/api/workflow', null, stateRef);
+
+  assert.ok(ids.project);
+  assert.ok(ids.member);
+  assert.ok(ids.phase);
+  assert.ok(ids.topic);
+  assert.deepEqual({
+    project: second.body.workflow.project.id,
+    member: second.body.workflow.teamMembers[0].id,
+    phase: second.body.workflow.curriculum.phases[0].id,
+    topic: second.body.workflow.curriculum.phases[0].topics[0].id
+  }, ids);
+  assert.deepEqual(second.body.workflow.curriculum.phases[0].assignedMemberIds, []);
+  assert.deepEqual(second.body.workflow.curriculum.phases[0].topics[0].assignedMemberIds, []);
 });

@@ -10,6 +10,7 @@ paths:
     get:
       operationId: getWorkflow
       summary: Read the full stored Mountain Scope state.
+      description: Returns the latest persisted workflow with stable project, team-member, phase, and topic identifiers plus phase.assignedMemberIds and topic.assignedMemberIds. Use these returned identifiers for any assignment action; do not invent or cache identifiers across reads.
       responses:
         '200':
           description: Current workflow and curriculum state
@@ -321,7 +322,7 @@ paths:
     post:
       operationId: assignMemberToPhase
       summary: Assign an existing team member to an existing phase.
-      description: Assigns an existing team member to an existing phase in the dashboard's single workflow. Prefer phaseId and memberId when known, but phaseName and memberName are supported for GPT delegation. Names must match exactly enough to be unambiguous. The stored assignment always uses the stable member ID and does not change progress or completion status.
+      description: Assigns an existing team member to an existing phase. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. Names are supported only when unambiguous. The stored assignment uses stable member IDs, prevents duplicates, and does not change progress or completion status.
       requestBody:
         required: true
         content:
@@ -329,12 +330,18 @@ paths:
             schema:
               $ref: '#/components/schemas/PhaseAssignmentRequest'
       responses:
-        '200': { description: Phase assignment updated }
+        '200':
+          description: Phase assignment updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhaseAssignmentResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /assignments/phases/unassign:
     post:
       operationId: unassignMemberFromPhase
       summary: Remove an existing team member assignment from an existing phase.
-      description: Removes an existing team member from an existing phase assignment in the dashboard's single workflow. Prefer phaseId and memberId when known, but phaseName and memberName are supported when unambiguous. It does not change progress, completion status, topics, or phase content.
+      description: Removes an existing team member from an existing phase assignment. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. It does not change progress, completion status, topics, or phase content.
       requestBody:
         required: true
         content:
@@ -342,12 +349,18 @@ paths:
             schema:
               $ref: '#/components/schemas/PhaseAssignmentRequest'
       responses:
-        '200': { description: Phase assignment updated }
+        '200':
+          description: Phase assignment updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhaseAssignmentResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /assignments/topics/assign:
     post:
       operationId: assignMemberToTopic
       summary: Assign an existing team member to an existing topic.
-      description: Assigns an existing team member to an existing topic in the dashboard's single workflow. Prefer topicId and memberId when known, but topicName and memberName are supported for GPT delegation. If topicName is ambiguous, include phaseId or phaseName. The stored assignment always uses the stable member ID and does not change progress or completion status.
+      description: Assigns an existing team member to an existing topic. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. If topicName is ambiguous, include phaseId or phaseName. The stored assignment uses stable member IDs, prevents duplicates, and does not change progress or completion status.
       requestBody:
         required: true
         content:
@@ -355,12 +368,18 @@ paths:
             schema:
               $ref: '#/components/schemas/TopicAssignmentRequest'
       responses:
-        '200': { description: Topic assignment updated }
+        '200':
+          description: Topic assignment updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TopicAssignmentResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /assignments/topics/unassign:
     post:
       operationId: unassignMemberFromTopic
       summary: Remove an existing team member assignment from an existing topic.
-      description: Removes an existing team member from an existing topic assignment in the dashboard's single workflow. Prefer topicId and memberId when known, but topicName and memberName are supported when unambiguous. It does not change progress, completion status, phases, or topic content.
+      description: Removes an existing team member from an existing topic assignment. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. It does not change progress, completion status, phases, or topic content.
       requestBody:
         required: true
         content:
@@ -368,12 +387,18 @@ paths:
             schema:
               $ref: '#/components/schemas/TopicAssignmentRequest'
       responses:
-        '200': { description: Topic assignment updated }
+        '200':
+          description: Topic assignment updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TopicAssignmentResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /assignments/batch:
     post:
       operationId: setAssignments
       summary: Atomically replace assignments on existing phases or topics.
-      description: Sets team-member assignments for existing phases or topics in the dashboard's single workflow. Prefer IDs when known, but memberNames plus targetName are supported when unambiguous. All members and targets are validated before any write; invalid input fails without partial updates.
+      description: Sets team-member assignments for existing phases or topics. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. All members and targets are validated before any write; invalid input fails without partial updates.
       requestBody:
         required: true
         content:
@@ -382,12 +407,28 @@ paths:
               type: object
               required: [assignments]
               properties:
+                projectId:
+                  type: string
+                  description: Optional for this confirmed single-project dashboard. If provided, it must match the id returned by getWorkflow.
                 assignments:
                   type: array
                   items: { $ref: '#/components/schemas/AssignmentSetItem' }
       responses:
-        '200': { description: Assignments updated }
+        '200':
+          description: Assignments updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAssignmentResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 components:
+  responses:
+    ErrorResponse:
+      description: Request validation failed or a referenced record was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     TopicStatus:
       type: string
@@ -427,6 +468,9 @@ components:
             - required: [memberId]
             - required: [memberName]
       properties:
+        projectId:
+          type: string
+          description: Optional for this confirmed single-project dashboard. If provided, it must match the project id from the latest getWorkflow response.
         phaseId: { type: string }
         phaseName: { type: string }
         memberId: { type: string }
@@ -441,6 +485,9 @@ components:
             - required: [memberId]
             - required: [memberName]
       properties:
+        projectId:
+          type: string
+          description: Optional for this confirmed single-project dashboard. If provided, it must match the project id from the latest getWorkflow response.
         topicId: { type: string }
         topicName: { type: string }
         phaseId:
@@ -462,6 +509,9 @@ components:
             - required: [memberIds]
             - required: [memberNames]
       properties:
+        projectId:
+          type: string
+          description: Optional override for this item. If provided, it must match the project id from the latest getWorkflow response.
         targetType:
           type: string
           enum: [phase, topic]
@@ -601,3 +651,59 @@ components:
         success: { type: boolean }
         project: { $ref: '#/components/schemas/Project' }
         workflow: { $ref: '#/components/schemas/Workflow' }
+    AssignmentResult:
+      type: object
+      properties:
+        targetType:
+          type: string
+          enum: [phase, topic]
+        target:
+          oneOf:
+            - $ref: '#/components/schemas/Phase'
+            - $ref: '#/components/schemas/Topic'
+        assignedMembers:
+          type: array
+          items: { $ref: '#/components/schemas/TeamMember' }
+    PhaseAssignmentResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        projectId: { type: string }
+        phaseId: { type: string }
+        phase: { $ref: '#/components/schemas/Phase' }
+        assignedMembers:
+          type: array
+          items: { $ref: '#/components/schemas/TeamMember' }
+        persistence: { type: string }
+        project: { $ref: '#/components/schemas/Project' }
+        workflow: { $ref: '#/components/schemas/Workflow' }
+    TopicAssignmentResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        projectId: { type: string }
+        topicId: { type: string }
+        topic: { $ref: '#/components/schemas/Topic' }
+        assignedMembers:
+          type: array
+          items: { $ref: '#/components/schemas/TeamMember' }
+        persistence: { type: string }
+        project: { $ref: '#/components/schemas/Project' }
+        workflow: { $ref: '#/components/schemas/Workflow' }
+    BatchAssignmentResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        projectId: { type: string }
+        assignments:
+          type: array
+          items: { $ref: '#/components/schemas/AssignmentResult' }
+        persistence: { type: string }
+        project: { $ref: '#/components/schemas/Project' }
+        workflow: { $ref: '#/components/schemas/Workflow' }
+    ErrorResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        error: { type: string }
+        requestId: { type: string }

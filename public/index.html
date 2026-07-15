@@ -153,15 +153,19 @@ header{
   display:inline-flex;
   align-items:center;
   gap:5px;
+  max-width:220px;
 }
 .assignment-trigger:hover{border-color:var(--orange);color:var(--orange)}
-.assignment-dots{display:inline-flex;align-items:center;gap:4px;min-width:14px}
+.assignment-labels{display:inline-flex;align-items:center;gap:5px;min-width:14px;max-width:100%;overflow:hidden}
+.assignment-chip{display:inline-flex;align-items:center;gap:5px;min-width:0;font-size:11px;font-weight:800;color:var(--text)}
+.assignment-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:92px}
 .member-dot{
   width:10px;
   height:10px;
   border-radius:50%;
   border:1px solid rgba(255,255,255,.55);
   display:inline-block;
+  flex:0 0 auto;
 }
 .roadmap-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
 .roadmap-title{font-size:13px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
@@ -594,9 +598,9 @@ function ensureVisibleSelection(){
 function assignmentDots(item){
   const ids = memberIdsFor(item);
   if(!ids.length) return '<span class="small">Assign</span>';
-  return `<span class="assignment-dots">${ids.map(id=>{
+  return `<span class="assignment-labels">${ids.map(id=>{
     const member = memberById(id);
-    return `<span class="member-dot" style="background:${escapeAttr(member.color)}" title="${escapeAttr(member.name)}" aria-label="${escapeAttr(member.name)}"></span>`;
+    return `<span class="assignment-chip" title="${escapeAttr(member.name)}"><span class="member-dot" style="background:${escapeAttr(member.color)}" aria-hidden="true"></span><span class="assignment-name">${escapeHtml(member.name)}</span></span>`;
   }).join('')}</span>`;
 }
 

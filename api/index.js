@@ -7,6 +7,7 @@ import {
   deleteTopic,
   movePhase,
   moveTopic,
+  normaliseWorkflowForStorage,
   setAssignments,
   unassignMemberFromPhase,
   unassignMemberFromTopic,
@@ -52,7 +53,7 @@ export function statusForApiError(error) {
   if (/too large/i.test(message)) return 413;
   if (/OPENAI_API_KEY|OpenAI request failed|OpenAI returned invalid JSON|OpenAI response/i.test(message)) return 500;
   if (/not found/i.test(message)) return 404;
-  if (/required|must|contain|already exists|direction|duplicate|ambiguous|would remove existing projects|different id/i.test(message)) return 400;
+  if (/required|must|contain|already exists|direction|duplicate|ambiguous|would remove existing projects|different id|does not match|missing/i.test(message)) return 400;
   return 500;
 }
 
@@ -101,6 +102,7 @@ async function readState() {
 async function writeState(state) {
   const migrated = migrateToSingleProject(state).state;
   state = migrated || state;
+  normaliseWorkflowForStorage(state);
   validateState(state);
   const url = `${process.env.SUPABASE_URL}/rest/v1/workflow_state?on_conflict=id`;
   const response = await fetch(url, {
@@ -190,7 +192,8 @@ export function migrateToSingleProject(input) {
     state.project.teamMembers = state.teamMembers || state.project.teamMembers || [];
     state.project.name = state.project.name || state.title || state.curriculum.title || 'Workflow';
     state.progress = calculateProgress(state);
-    return { state, changed };
+    const normalised = normaliseWorkflowForStorage(state);
+    return { state, changed: changed || normalised.changed };
   }
   const projects = Array.isArray(state.projects) ? state.projects : [];
   let selected = projects.find((project) => project.id === state.activeProjectId);
@@ -223,6 +226,7 @@ export function migrateToSingleProject(input) {
   stripNestedProjectsFromPhases(next.curriculum.phases);
   next.project.phases = next.curriculum.phases;
   next.progress = calculateProgress(next);
+  normaliseWorkflowForStorage(next);
   return { state: next, changed: true };
 }
 
@@ -274,7 +278,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && path === '/workflow') {
       const result = migrateToSingleProject(await readState());
       const workflow = result.state;
-      if (workflow) ensureCurriculumState(workflow);
+      if (workflow) normaliseWorkflowForStorage(workflow);
       if (result.changed && workflow) await writeState(workflow);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
       return send(res, 200, { success: true, project: workflow ? projectResponse(workflow) : null, workflow });
@@ -292,7 +296,8 @@ export default async function handler(req, res) {
       console.warn('API request rejected', { ...routeLogBase(req, path, id, startedAt), status: 409, errorMessage: 'Open the dashboard once to initialise the workflow.' });
       return sendError(res, 409, 'Open the dashboard once to initialise the workflow.', id);
     }
-    ensureCurriculumState(state);
+    const normalised = normaliseWorkflowForStorage(state);
+    if (normalised.changed) migration.changed = true;
     if (migration.changed) await writeState(state);
 
     if (req.method === 'GET' && path === '/curriculum') {
@@ -372,31 +377,31 @@ export default async function handler(req, res) {
       const result = assignMemberToPhase(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/phases/unassign') {
       const result = unassignMemberFromPhase(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, phaseId: result.target.id, phase: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/topics/assign') {
       const result = assignMemberToTopic(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/topics/unassign') {
       const result = unassignMemberFromTopic(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, topicId: result.target.id, topic: result.target, assignedMembers: result.assignedMembers, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     if (req.method === 'POST' && path === '/assignments/batch') {
-      const results = setAssignments(state, req.body && req.body.assignments);
+      const results = setAssignments(state, req.body || {});
       await writeState(state);
       console.info('API request completed', { ...routeLogBase(req, path, id, startedAt), status: 200 });
-      return send(res, 200, { success: true, assignments: results, persistence: 'stored', project: projectResponse(state), workflow: state });
+      return send(res, 200, { success: true, projectId: state.project.id, assignments: results, persistence: 'stored', project: projectResponse(state), workflow: state });
     }
     const notesMatch = path.match(/^\/topics\/([^/]+)\/notes$/);
     if (req.method === 'PATCH' && notesMatch) {
