@@ -322,7 +322,7 @@ paths:
     post:
       operationId: assignMemberToPhase
       summary: Assign an existing team member to an existing phase.
-      description: Assigns an existing team member to an existing phase. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. Names are supported only when unambiguous. The stored assignment uses stable member IDs, prevents duplicates, and does not change progress or completion status.
+      description: Assign an existing member to a phase using IDs from the latest getWorkflow. projectId may be omitted for the single stored project, but must match if sent. Prevents duplicates, preserves unrelated data, and does not change progress or status.
       requestBody:
         required: true
         content:
@@ -341,7 +341,7 @@ paths:
     post:
       operationId: unassignMemberFromPhase
       summary: Remove an existing team member assignment from an existing phase.
-      description: Removes an existing team member from an existing phase assignment. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. It does not change progress, completion status, topics, or phase content.
+      description: Remove a member from a phase using IDs from the latest getWorkflow. projectId may be omitted for the single stored project, but must match if sent. Preserves unrelated data and does not change progress, status, topics, or phase content.
       requestBody:
         required: true
         content:
@@ -360,7 +360,7 @@ paths:
     post:
       operationId: assignMemberToTopic
       summary: Assign an existing team member to an existing topic.
-      description: Assigns an existing team member to an existing topic. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. If topicName is ambiguous, include phaseId or phaseName. The stored assignment uses stable member IDs, prevents duplicates, and does not change progress or completion status.
+      description: Assign an existing member to a topic using IDs from the latest getWorkflow. projectId may be omitted for the single stored project, but must match if sent. Prevents duplicates, preserves unrelated data, and does not change progress or status.
       requestBody:
         required: true
         content:
@@ -379,7 +379,7 @@ paths:
     post:
       operationId: unassignMemberFromTopic
       summary: Remove an existing team member assignment from an existing topic.
-      description: Removes an existing team member from an existing topic assignment. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. It does not change progress, completion status, phases, or topic content.
+      description: Remove a member from a topic using IDs from the latest getWorkflow. projectId may be omitted for the single stored project, but must match if sent. Preserves unrelated data and does not change progress, status, phases, or topic content.
       requestBody:
         required: true
         content:
@@ -398,7 +398,7 @@ paths:
     post:
       operationId: setAssignments
       summary: Atomically replace assignments on existing phases or topics.
-      description: Sets team-member assignments for existing phases or topics. Identifiers must come from the latest getWorkflow response. In the confirmed single-project dashboard, projectId may be omitted; when provided it must match the stored project id. All members and targets are validated before any write; invalid input fails without partial updates.
+      description: Set phase/topic assignments using IDs from the latest getWorkflow. projectId may be omitted for the single stored project, but must match if sent. Validates all members and targets first, preserving unrelated data and avoiding partial writes.
       requestBody:
         required: true
         content:
