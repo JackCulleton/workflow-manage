@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Understand the Project | Team Work Smoothie</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+:root{
+  --bg:#090A0D;
+  --panel:#12141A;
+  --panel-2:#171A22;
+  --border:#292D38;
+  --text:#F4F5F7;
+  --dim:#A2A7B3;
+  --orange:#F5893A;
+  --green:#42D392;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:
+    linear-gradient(90deg, rgba(9,10,13,.92) 0%, rgba(9,10,13,.78) 45%, rgba(9,10,13,.42) 100%),
+    url('./assets/teamwork-smoothie-hero.png') center / cover no-repeat;
+  color:var(--text);
+  font-family:Inter,system-ui,sans-serif;
+  padding:24px;
+}
+a,button{font-family:inherit}
+.page{
+  width:min(1120px,100%);
+  min-height:calc(100vh - 48px);
+  margin:0 auto;
+  display:grid;
+  align-content:center;
+  gap:24px;
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  font-size:18px;
+  font-weight:900;
+}
+.brand-mark{
+  width:50px;
+  height:50px;
+  border-radius:12px;
+  display:grid;
+  place-items:center;
+  background:linear-gradient(135deg,#ffb84d,var(--orange));
+  color:#171007;
+}
+.content{
+  width:min(780px,100%);
+  display:grid;
+  gap:20px;
+}
+.kicker{
+  color:var(--orange);
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+h1{
+  font-size:clamp(42px,7vw,86px);
+  line-height:1;
+  font-weight:900;
+  letter-spacing:0;
+}
+.lead{
+  color:#E9EDF1;
+  font-size:22px;
+  line-height:1.55;
+}
+.panel{
+  width:min(720px,100%);
+  background:rgba(18,20,26,.92);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  padding:18px;
+  display:grid;
+  gap:14px;
+  box-shadow:0 24px 70px rgba(0,0,0,.32);
+}
+.panel h2{
+  font-size:18px;
+  line-height:1.25;
+}
+.panel p{
+  color:var(--dim);
+  font-size:15px;
+  line-height:1.65;
+}
+.actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:48px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;
+  padding:12px 16px;
+  color:var(--text);
+  background:var(--panel-2);
+  text-decoration:none;
+  font-size:15px;
+  font-weight:900;
+  cursor:pointer;
+}
+.btn.primary{
+  background:var(--orange);
+  border-color:var(--orange);
+  color:#160c04;
+}
+.btn.secondary:hover{border-color:var(--orange);color:var(--orange)}
+.note{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  color:#DDE4EA;
+  font-size:14px;
+  line-height:1.55;
+}
+.check{
+  width:24px;
+  height:24px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+  background:var(--green);
+  color:#07130d;
+  font-weight:900;
+}
+@media (max-width:720px){
+  body{padding:18px}
+  .page{min-height:calc(100svh - 36px);align-content:start;padding-top:12px}
+  h1{font-size:46px}
+  .lead{font-size:19px}
+  .actions{align-items:stretch}
+  .btn{width:100%}
+}
+</style>
+</head>
+<body>
+<main class="page">
+  <div class="brand">
+    <div class="brand-mark">T</div>
+    <span>Team Work Smoothie</span>
+  </div>
+
+  <section class="content">
+    <div class="kicker">Understand before you divide</div>
+    <h1>Talk through the project first.</h1>
+    <p class="lead">This dashboard and GPT help break down the phases in a group project so there are no last-minute surprises, and every team member knows what they are doing without stepping on each other's toes.</p>
+
+    <div class="panel">
+      <h2>Speak to this GPT to understand the subject better.</h2>
+      <p>Ask it about the brief, confusing requirements, risks, roles, and what each team member should own. Once you are happy, tell it to update the dashboard, or press Next to manually break down the project.</p>
+      <div class="note"><span class="check" aria-hidden="true">✓</span><span>Use the GPT to turn uncertainty into a shared project plan before work starts.</span></div>
+      <div class="actions">
+        <a class="btn primary" href="https://chatgpt.com/g/g-6a53c7fc0a788191abd126ae90594e06-workflow-manager" target="_blank" rel="noreferrer">Open Workflow Manager GPT</a>
+        <a class="btn secondary" href="./dashboard.html">Next</a>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
