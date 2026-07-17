@@ -699,8 +699,8 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
 }
 </style>
 </head>
-<body class="landing-active">
-<section class="landing" id="landing">
+<body data-page="dashboard">
+<section class="landing" id="landing" hidden>
   <div class="landing-inner">
     <div class="landing-copy">
       <div class="landing-brand">
@@ -739,7 +739,7 @@ textarea{resize:vertical;min-height:120px;line-height:1.5}
   <main id="workflowStage"></main>
 </div>
 
-<div class="wrap app-shell" id="appShell" hidden>
+<div class="wrap app-shell" id="appShell">
   <header>
     <div class="brand" aria-label="Workspace">
       <div class="brand-mark">T</div>
@@ -2152,7 +2152,13 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
   const button = document.getElementById('startBtn');
   button.disabled = true;
   button.textContent = 'Starting...';
-  window.location.href = './dashboard.html';
+  if(!hasLoadedState){
+    await loadState();
+    hasLoadedState = true;
+  }
+  openDashboard();
+  button.disabled = false;
+  button.textContent = 'Start';
 });
 document.querySelectorAll('[data-stage-nav]').forEach(button=>button.addEventListener('click',()=>showWorkflowStage(button.dataset.stageNav)));
 document.getElementById('understandMemberSelect').addEventListener('change',event=>{
@@ -2170,6 +2176,10 @@ document.addEventListener('click',event=>{
   if(!event.target.closest('.assignment-menu') && !event.target.closest('.assignment-trigger')) closeAssignmentMenu();
 });
 
+if(document.body.dataset.page === 'dashboard'){
+  hasLoadedState = true;
+  loadState();
+}
 </script>
 </body>
 </html>

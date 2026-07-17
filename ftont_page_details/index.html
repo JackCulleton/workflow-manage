@@ -1592,15 +1592,6 @@ function renderNotes(body, topic){
   document.getElementById('notesBox').addEventListener('input', e=>{ topic.notes = e.target.value; scheduleSave(); });
 }
 
-function openDashboard(){
-  document.getElementById('workflowShell').hidden = true;
-  document.getElementById('landing').hidden = true;
-  document.getElementById('appShell').hidden = false;
-  document.body.classList.remove('landing-active');
-  render();
-  window.scrollTo({ top:0, behavior:'smooth' });
-}
-
 function showWorkflowStage(stageName='understand'){
   currentWorkflowStage = stageName;
   document.getElementById('landing').hidden = true;
@@ -1779,7 +1770,7 @@ function renderBreakdownStage(){
       </div>
       <div class="stage-footer">
         <button class="btn" id="breakdownBackBtn">Back</button>
-        <button class="btn primary" id="buildRoadmapBtn">Build Plan</button>
+        <button class="btn primary" id="buildRoadmapBtn">Build Roadmap</button>
       </div>
     </section>
   `;
@@ -1896,10 +1887,15 @@ async function buildRoadmapAndOpenDashboard(){
     await persist();
     selectedPhaseId = (state.curriculum?.phases || [])[0]?.id || null;
     selectedTopicId = selectedPhaseId ? phaseTopics(state.curriculum.phases[0])[0]?.id || null : null;
-    openDashboard();
+    document.getElementById('workflowShell').hidden = true;
+    document.getElementById('landing').hidden = true;
+    document.getElementById('appShell').hidden = false;
+    document.body.classList.remove('landing-active');
+    render();
+    window.scrollTo({ top:0, behavior:'smooth' });
   }catch(error){
     showToast(error.message);
-    buttons.forEach(button=>{ button.disabled = false; button.textContent = button.id === 'buildRoadmapBtn' ? 'Build Plan' : 'Continue'; });
+    buttons.forEach(button=>{ button.disabled = false; button.textContent = button.id === 'buildRoadmapBtn' ? 'Build Roadmap' : 'Continue'; });
   }
 }
 
@@ -2152,7 +2148,14 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
   const button = document.getElementById('startBtn');
   button.disabled = true;
   button.textContent = 'Starting...';
-  window.location.href = './dashboard.html';
+  if(!hasLoadedState){
+    await loadState();
+    hasLoadedState = true;
+  }
+  showWorkflowStage('understand');
+  window.scrollTo({ top:0, behavior:'smooth' });
+  button.disabled = false;
+  button.textContent = 'Start';
 });
 document.querySelectorAll('[data-stage-nav]').forEach(button=>button.addEventListener('click',()=>showWorkflowStage(button.dataset.stageNav)));
 document.getElementById('understandMemberSelect').addEventListener('change',event=>{
