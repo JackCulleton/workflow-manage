@@ -120,6 +120,8 @@ Run tests:
 ```bash
 npm test
 ```
+or use this url: https://workflow-manage.vercel.app/
+
 
 ## Connect ChatGPT
 
@@ -130,10 +132,23 @@ npm test
 5. Paste the schema into the Action schema field.
 6. Leave authentication disabled unless you add a separate access-control layer.
 
-## Security Notes
 
-- The Supabase service-role key should only be used by the server-side API.
-- The OpenAI key should only live in server-side environment variables.
-- The browser does not ask users for Supabase or OpenAI keys.
-- `supabase.sql` does not create public Supabase access policies.
-![alt text](image.png)
+## reflection 
+
+## Workflow Manager Reflection
+
+Working on Workflow Manager gave me a much better understanding of how important it is to have complete clarification before giving prompts to AI. Compared to my earlier projects, I became much more specific about what I wanted the AI to build, how each feature should work and what should not be changed. This made the results more accurate and reduced the amount of time spent fixing misunderstandings.
+
+I also started to use AI more like an equal project partner throughout the development process instead of only using it to generate code. I used AI to help plan features, discuss different options, solve problems, organise the workflow and improve the design of the project. Going back and forth with AI helped me think through my decisions before implementing them, rather than immediately accepting the first solution.
+
+Another major improvement was my understanding of the project architecture. I had a clearer idea of how the frontend, backend, API endpoints, Vercel and Supabase worked together. Because I understood the role of each part, the development process was much cleaner and easier to follow. I could understand where data was being sent, how it was being validated and how the dashboard was being updated.
+
+The purpose of Workflow Manager is to help teams clearly understand what they need to do during a project. This will be especially useful for Japan because everyone will be able to see the different phases, topics, responsibilities and overall progress of the project. It should reduce confusion and make it easier for team members to know what they are working on and what still needs to be completed.
+
+One of the main failures was my attempt to make the AI automatically check the Git repository and use it to mark the progress of the project. I found it difficult to fine-tune the AI enough for it to accurately understand whether a task had actually been completed. It also required too many tokens because the AI needed to repeatedly inspect large amounts of code and repository information. Because of this, the feature was not efficient or reliable enough, so I decided that progress should be updated more directly by the users and the AI assistant.
+
+This failure taught me that not every feature should use AI just because it is possible. The feature must also be accurate, useful and affordable to run. It helped me understand that AI works best when it is given clear information and a controlled task, rather than being expected to fully understand an entire project without enough context.
+
+If I completed the project again, I would increase my knowledge of the different AI tools, integrations and development tools available before starting. This would help me choose the most efficient tools for each part of the project and avoid spending time trying to make one tool perform a task that another tool may be better suited for.
+
+Overall, Workflow Manager showed a clear improvement in how I use AI. I became better at writing complete prompts, planning the architecture and working with AI throughout the full development process. Even though the automatic repository grading feature was unsuccessful, the project will still be very useful for Japan by helping teams stay organised, understand their responsibilities and follow the progress of their work.
